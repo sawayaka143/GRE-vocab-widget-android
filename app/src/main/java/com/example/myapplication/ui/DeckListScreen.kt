@@ -19,13 +19,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.Deck
-import com.example.myapplication.data.WordState
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.ui.theme.MagooshGreen
 
@@ -35,6 +35,8 @@ fun DeckListScreen(
     progressStore: ProgressStore,
     onPracticeDeck: (Deck) -> Unit
 ) {
+    // Observe revision so progress recomposes when the widget (or app) changes it.
+    val revision by progressStore.revision
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background

@@ -1,6 +1,7 @@
 package com.example.myapplication.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,8 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,6 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -37,12 +40,8 @@ import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordState
 import com.example.myapplication.ui.theme.MagooshAmber
-import com.example.myapplication.ui.theme.MagooshAmberLight
 import com.example.myapplication.ui.theme.MagooshBlue
-import com.example.myapplication.ui.theme.MagooshBlueLight
 import com.example.myapplication.ui.theme.MagooshGreen
-import com.example.myapplication.ui.theme.MagooshGreenLight
-import com.example.myapplication.ui.theme.MagooshPink
 
 @Composable
 fun FlashcardScreen(
@@ -52,10 +51,33 @@ fun FlashcardScreen(
 ) {
     var currentIndex by remember { mutableStateOf(0) }
     var flipped by remember { mutableStateOf(false) }
+    // Observe revision so progress recomposes when the widget (or app) changes it.
+    val revision by progressStore.revision
+    // Only advance when there are words; an empty deck must not divide by zero.
+    val total = deck.words.size
+    val safeAdvance: () -> Unit = {
+        if (total > 0) currentIndex = (currentIndex + 1) % total
+    }
+    // Guard against empty decks.
+    if (total == 0) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "No words in this deck yet",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+        return
+    }
     val currentWord = deck.words[currentIndex]
     val state = progressStore.stateOf(currentWord.word)
     val (mastered, reviewing, learning) = progressStore.countsFor(deck)
-    val total = deck.words.size
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -78,7 +100,9 @@ fun FlashcardScreen(
                     text = "← Back",
                     color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 16.sp,
-                    modifier = Modifier.clickable { onBack() }
+                    modifier = Modifier
+                        .clickable { onBack() }
+                        .semantics { contentDescription = "Back to deck list" }
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
@@ -98,61 +122,34 @@ fun FlashcardScreen(
                 word = currentWord,
                 state = state,
                 flipped = flipped,
-                onFlip = { flipped = !flipped }
+                onFlip = { flipped = !flipped },
+                onKnew = {
+                    progressStore.markKnew(currentWord.word)
+                    flipped = false
+                    safeAdvance()
+                },
+                onDidntKnow = {
+                    progressStore.markDidntKnow(currentWord.word)
+                    flipped = false
+                    safeAdvance()
+                }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Action buttons (only when flipped)
-            if (flipped) {
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Button(
-                        onClick = {
-                            progressStore.markKnew(currentWord.word)
-                            flipped = false
-                            currentIndex = (currentIndex + 1) % total
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MagooshGreen),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("✓ I knew this word", color = Color.White)
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Button(
-                        onClick = {
-                            progressStore.markDidntKnow(currentWord.word)
-                            flipped = false
-                            currentIndex = (currentIndex + 1) % total
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MagooshPink),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("✗ I didn't know this word", color = Color.White)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Progress stats
+            // Progress stats (close to the card)
             ProgressStat(
-                label = "You have mastered $mastered of $total words",
+                label = "You have mastered $mastered out of $total words",
                 fraction = if (total == 0) 0f else mastered.toFloat() / total,
                 color = MagooshGreen
             )
             ProgressStat(
-                label = "You are reviewing $reviewing of $total words",
+                label = "You are reviewing $reviewing out of $total words",
                 fraction = if (total == 0) 0f else reviewing.toFloat() / total,
                 color = MagooshAmber
             )
             ProgressStat(
-                label = "You are learning $learning of $total words",
+                label = "You are learning $learning out of $total words",
                 fraction = if (total == 0) 0f else learning.toFloat() / total,
                 color = MagooshBlue
             )
@@ -165,53 +162,74 @@ private fun Flashcard(
     word: Word,
     state: WordState,
     flipped: Boolean,
-    onFlip: () -> Unit
+    onFlip: () -> Unit,
+    onKnew: () -> Unit,
+    onDidntKnow: () -> Unit
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(280.dp)
+            .height(360.dp)
             .clickable { onFlip() },
         shape = RoundedCornerShape(16.dp),
         color = Color.White,
         shadowElevation = 4.dp
     ) {
-        Box(modifier = Modifier.padding(20.dp)) {
-            // Status badge
-            StatusBadge(state = state, modifier = Modifier.align(Alignment.TopEnd))
-
+        Box(modifier = Modifier.fillMaxSize()) {
             if (!flipped) {
+                // Front: badge + centered word + full-width bottom bar
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
+                    StatusBadge(state = state, modifier = Modifier.align(Alignment.End))
+
+                    Spacer(modifier = Modifier.weight(1f))
+
                     Text(
                         text = word.word,
+                        fontFamily = FontFamily.Serif,
                         fontSize = 34.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Surface(
-                        color = Color(0xFFF2F2F2),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = "Tap to see meaning →",
-                            color = Color(0xFF666666),
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                        )
-                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+
+                // Divider + full-width bottom bar
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                ) {
+                    HorizontalDivider(color = Color(0xFFE0E0E0))
+                    Text(
+                        text = "Tap to see meaning →",
+                        color = Color(0xFF666666),
+                        fontSize = 14.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF2F2F2), RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
+                            .padding(vertical = 12.dp),
+                        textAlign = TextAlign.Center
+                    )
                 }
             } else {
+                // Back: content (badge + word + definition) padded; buttons edge-to-edge
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(top = 36.dp)
+                        .padding(20.dp)
                 ) {
+                    StatusBadge(state = state, modifier = Modifier.align(Alignment.End))
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     Text(
                         text = word.word,
                         fontSize = 26.sp,
@@ -233,6 +251,46 @@ private fun Flashcard(
                         )
                     }
                 }
+
+                // Action buttons edge-to-edge at the bottom of the card (flipped face)
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                ) {
+                    // Top button: light green, dark green text
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .background(Color(0xFFBAF5CA))
+                            .clickable(enabled = true, onClick = onKnew),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "✓ I knew this word",
+                            color = Color(0xFF30B961),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    // Bottom button: light pink, dark red text
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .background(Color(0xFFF9D1D2))
+                            .clickable(enabled = true, onClick = onDidntKnow),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "✗ I didn't know this word",
+                            color = Color(0xFFC07571),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
     }
@@ -241,15 +299,14 @@ private fun Flashcard(
 @Composable
 private fun StatusBadge(state: WordState, modifier: Modifier = Modifier) {
     val (label, bg, fg) = when (state) {
-        WordState.MASTERED -> Triple("MASTERED", MagooshGreenLight, MagooshGreen)
-        WordState.REVIEWING -> Triple("REVIEWING", MagooshAmberLight, MagooshAmber)
-        WordState.LEARNING -> Triple("LEARNING", MagooshBlueLight, MagooshBlue)
+        WordState.MASTERED -> Triple("MASTERED", Color(0xFFBAF5CA), Color(0xFF30B961))
+        WordState.REVIEWING -> Triple("REVIEWING", Color(0xFFFFE3C2), Color(0xFFEBA15A))
+        WordState.LEARNING -> Triple("LEARNING", Color(0xFFF9D1D2), Color(0xFFC07571))
         WordState.NEW -> Triple("NEW", Color(0xFFF2F2F2), Color(0xFF666666))
     }
     Surface(
         modifier = modifier,
-        color = bg,
-        shape = RoundedCornerShape(8.dp)
+        color = bg
     ) {
         Text(
             text = label,
@@ -276,9 +333,10 @@ private fun ProgressStat(label: String, fraction: Float, color: Color) {
             progress = { fraction },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(8.dp),
+                .height(8.dp)
+                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp)),
             color = color,
-            trackColor = Color.White.copy(alpha = 0.3f)
+            trackColor = Color.White.copy(alpha = 0.15f)
         )
     }
 }

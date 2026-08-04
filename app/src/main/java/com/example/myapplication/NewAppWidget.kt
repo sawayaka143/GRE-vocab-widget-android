@@ -7,12 +7,16 @@ import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.widget.RemoteViews
+import com.example.myapplication.data.ProgressStore
+import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordRepository
+import com.example.myapplication.data.WordState
 
 /**
  * GRE vocab home-screen widget.
- * Shows a random word (front). Tapping the "Tap to see meaning" bar flips
- * the card in place to reveal the word's definition + example.
+ * - Tap the word to cycle to a different random word.
+ * - Tap the bottom bar to flip between the word and its meaning.
+ * - Tap "Learned" to mark the word as mastered (synced with the app).
  */
 class NewAppWidget : AppWidgetProvider() {
 
@@ -28,16 +32,39 @@ class NewAppWidget : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_FLIP) {
-            val widgetId = intent.getIntExtra(
-                AppWidgetManager.EXTRA_APPWIDGET_ID,
-                AppWidgetManager.INVALID_APPWIDGET_ID
-            )
-            if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+        val widgetId = intent.getIntExtra(
+            AppWidgetManager.EXTRA_APPWIDGET_ID,
+            AppWidgetManager.INVALID_APPWIDGET_ID
+        )
+        if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return
+
+        val manager = AppWidgetManager.getInstance(context)
+        when (intent.action) {
+            ACTION_FLIP -> {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val flipped = !prefs.getBoolean(KEY_FLIPPED + widgetId, false)
                 prefs.edit().putBoolean(KEY_FLIPPED + widgetId, flipped).apply()
-                updateAppWidget(context, AppWidgetManager.getInstance(context), widgetId)
+                updateAppWidget(context, manager, widgetId)
+            }
+
+            ACTION_NEXT -> {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val current = prefs.getString(KEY_WORD + widgetId, null)
+                val next = nextRandomWord(context, current) ?: return
+                prefs.edit()
+                    .putString(KEY_WORD + widgetId, next.word)
+                    .putBoolean(KEY_FLIPPED + widgetId, false)
+                    .apply()
+                updateAppWidget(context, manager, widgetId)
+            }
+
+            ACTION_TOGGLE_LEARNED -> {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val word = prefs.getString(KEY_WORD + widgetId, null) ?: return
+                val progress = ProgressStore(context)
+                val isLearned = progress.stateOf(word) == WordState.MASTERED
+                if (isLearned) progress.markDidntKnow(word) else progress.markKnew(word)
+                updateAppWidget(context, manager, widgetId)
             }
         }
     }
@@ -47,6 +74,7 @@ class NewAppWidget : AppWidgetProvider() {
         val editor = prefs.edit()
         for (appWidgetId in appWidgetIds) {
             editor.remove(KEY_FLIPPED + appWidgetId)
+            editor.remove(KEY_WORD + appWidgetId)
         }
         editor.apply()
     }
@@ -57,17 +85,22 @@ internal fun updateAppWidget(
     appWidgetManager: AppWidgetManager,
     appWidgetId: Int
 ) {
-    val repository = WordRepository(context)
-    val decks = repository.loadDecks()
-    val allWords = decks.flatMap { it.words }
-    val word = allWords.randomOrNull() ?: return
-
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    // Pick a word once per widget and remember it, so flips don't re-roll.
+    val word = currentWordFor(context, prefs, appWidgetId)
+    if (word == null) {
+        appWidgetManager.updateAppWidget(appWidgetId, RemoteViews(context.packageName, R.layout.new_app_widget))
+        return
+    }
+
     val flipped = prefs.getBoolean(KEY_FLIPPED + appWidgetId, false)
+    val learned = ProgressStore(context).stateOf(word.word) == WordState.MASTERED
 
     val views = RemoteViews(context.packageName, R.layout.new_app_widget)
     views.setTextViewText(R.id.widget_deck, word.deck)
     views.setTextViewText(R.id.widget_word, word.word)
+    views.setCompoundButtonChecked(R.id.widget_learned, learned)
 
     if (flipped) {
         // Back: word + definition + example, bar says "Tap to go back"
@@ -92,21 +125,71 @@ internal fun updateAppWidget(
         )
     }
 
-    val flipIntent = Intent(context, NewAppWidget::class.java).apply {
-        action = ACTION_FLIP
-        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-    }
-    val pendingIntent = PendingIntent.getBroadcast(
-        context,
-        appWidgetId,
-        flipIntent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    // Tap word -> next random word
+    views.setOnClickPendingIntent(
+        R.id.widget_word,
+        buildPendingIntent(context, appWidgetId, ACTION_NEXT)
     )
-    views.setOnClickPendingIntent(R.id.widget_reveal_bar, pendingIntent)
+    // Tap bottom bar -> flip
+    views.setOnClickPendingIntent(
+        R.id.widget_reveal_bar,
+        buildPendingIntent(context, appWidgetId, ACTION_FLIP)
+    )
+    // Tap checkbox -> toggle learned
+    views.setOnClickPendingIntent(
+        R.id.widget_learned,
+        buildPendingIntent(context, appWidgetId, ACTION_TOGGLE_LEARNED)
+    )
 
     appWidgetManager.updateAppWidget(appWidgetId, views)
 }
 
+private fun buildPendingIntent(context: Context, widgetId: Int, action: String): PendingIntent {
+    val intent = Intent(context, NewAppWidget::class.java).apply {
+        this.action = action
+        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+    }
+    return PendingIntent.getBroadcast(
+        context,
+        widgetId,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+}
+
+/** Returns the word this widget is showing, picking and remembering a random one on first use. */
+private fun currentWordFor(
+    context: Context,
+    prefs: android.content.SharedPreferences,
+    appWidgetId: Int
+): Word? {
+    val saved = prefs.getString(KEY_WORD + appWidgetId, null)
+    if (saved != null) {
+        return WordRepository(context).loadDecks().flatMap { it.words }
+            .firstOrNull { it.word == saved }
+    }
+
+    val word = nextRandomWord(context, null) ?: return null
+    prefs.edit().putString(KEY_WORD + appWidgetId, word.word).apply()
+    return word
+}
+
+/** Picks a random word different from [exclude]. */
+private fun nextRandomWord(context: Context, exclude: String?): Word? {
+    val allWords = WordRepository(context).loadDecks().flatMap { it.words }
+    if (allWords.isEmpty()) return null
+    if (allWords.size == 1) return allWords.first()
+
+    var candidate = allWords.random()
+    while (candidate.word == exclude) {
+        candidate = allWords.random()
+    }
+    return candidate
+}
+
 private const val PREFS_NAME = "vocab_widget_prefs"
 private const val KEY_FLIPPED = "flipped_"
+private const val KEY_WORD = "word_"
 private const val ACTION_FLIP = "com.example.myapplication.action.FLIP"
+private const val ACTION_NEXT = "com.example.myapplication.action.NEXT"
+private const val ACTION_TOGGLE_LEARNED = "com.example.myapplication.action.TOGGLE_LEARNED"

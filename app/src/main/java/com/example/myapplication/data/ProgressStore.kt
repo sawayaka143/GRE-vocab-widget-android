@@ -2,6 +2,7 @@ package com.example.myapplication.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.compose.runtime.mutableIntStateOf
 
 enum class WordState {
     NEW, LEARNING, REVIEWING, MASTERED
@@ -12,21 +13,29 @@ enum class WordState {
  * Magoosh-style transitions:
  *  - knew:      NEW -> MASTERED, LEARNING -> REVIEWING, REVIEWING -> MASTERED
  *  - didn't know: NEW -> LEARNING, LEARNING/REVIEWING -> LEARNING, MASTERED -> LEARNING
+ *
+ * [revision] is a Compose-observable counter bumped on every state change, so
+ * screens (app or widget-originated) can recompose and re-read fresh counts.
  */
 class ProgressStore(context: Context) {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("vocab_progress", Context.MODE_PRIVATE)
 
+    /** Bumped on every state change; observe to force UI recomposition. */
+    val revision = mutableIntStateOf(0)
+
     fun stateOf(word: String): WordState =
         WordState.valueOf(prefs.getString(KEY_STATE + word, WordState.NEW.name) ?: WordState.NEW.name)
 
     fun markKnew(word: String) {
         prefs.edit().putString(KEY_STATE + word, knewTransition(stateOf(word)).name).apply()
+        revision.intValue++
     }
 
     fun markDidntKnow(word: String) {
         prefs.edit().putString(KEY_STATE + word, didntKnowTransition(stateOf(word)).name).apply()
+        revision.intValue++
     }
 
     /** Returns (mastered, reviewing, learning) counts for a deck. */
