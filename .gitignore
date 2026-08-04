@@ -1,16 +1,19 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# --- Local / personal (never commit) ---
 local.properties
 REQUIREMENTS.md
+.commandcode/
+.kotlin/
+.idea/
+
+# --- Gradle ---
+.gradle/
+build/
+/captures
+
+# --- Android ---
+*.iml
+.externalNativeBuild
+.cxx
+
+# --- OS / editor ---
+.DS_Store
