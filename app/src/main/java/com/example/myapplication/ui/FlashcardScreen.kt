@@ -1,8 +1,11 @@
 package com.example.myapplication.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -269,13 +272,23 @@ private fun Flashcard(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                 ) {
-                    // Top button: light green, dark green text
+                    // Top button: green, dark green text
+                    val knewInteractionSource = remember { MutableInteractionSource() }
+                    val knewIsPressed by knewInteractionSource.collectIsPressedAsState()
+                    val knewBg by animateColorAsState(
+                        targetValue = if (knewIsPressed) Color(0xFF96C4A3) else Color(0xFFBCF5CB),
+                        label = "knewBg"
+                    )
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
-                            .background(Color(0xFFBAF5CA))
-                            .clickable(enabled = true, onClick = onKnew),
+                            .background(knewBg)
+                            .clickable(
+                                interactionSource = knewInteractionSource,
+                                indication = null,
+                                onClick = onKnew
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -285,13 +298,23 @@ private fun Flashcard(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    // Bottom button: light pink, dark red text
+                    // Bottom button: pink, dark red text
+                    val didntKnowInteractionSource = remember { MutableInteractionSource() }
+                    val didntKnowIsPressed by didntKnowInteractionSource.collectIsPressedAsState()
+                    val didntKnowBg by animateColorAsState(
+                        targetValue = if (didntKnowIsPressed) Color(0xFFCAA6A8) else Color(0xFFFDCFD1),
+                        label = "didntKnowBg"
+                    )
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
-                            .background(Color(0xFFF9D1D2))
-                            .clickable(enabled = true, onClick = onDidntKnow),
+                            .background(didntKnowBg)
+                            .clickable(
+                                interactionSource = didntKnowInteractionSource,
+                                indication = null,
+                                onClick = onDidntKnow
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
