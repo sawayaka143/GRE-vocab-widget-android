@@ -5,13 +5,14 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.view.View
 import android.widget.RemoteViews
 import com.example.myapplication.data.WordRepository
 
 /**
  * GRE vocab home-screen widget.
- * Shows a random word (with definition/example when available) from the bundled decks.
- * Tap "Next" to show another random word.
+ * Shows a random word (front). Tapping the "Tap to see meaning" bar flips
+ * the card in place to reveal the word's definition + example.
  */
 class NewAppWidget : AppWidgetProvider() {
 
@@ -27,15 +28,27 @@ class NewAppWidget : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_NEXT_WORD) {
+        if (intent.action == ACTION_FLIP) {
             val widgetId = intent.getIntExtra(
                 AppWidgetManager.EXTRA_APPWIDGET_ID,
                 AppWidgetManager.INVALID_APPWIDGET_ID
             )
             if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val flipped = !prefs.getBoolean(KEY_FLIPPED + widgetId, false)
+                prefs.edit().putBoolean(KEY_FLIPPED + widgetId, flipped).apply()
                 updateAppWidget(context, AppWidgetManager.getInstance(context), widgetId)
             }
         }
+    }
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        for (appWidgetId in appWidgetIds) {
+            editor.remove(KEY_FLIPPED + appWidgetId)
+        }
+        editor.apply()
     }
 }
 
@@ -49,36 +62,51 @@ internal fun updateAppWidget(
     val allWords = decks.flatMap { it.words }
     val word = allWords.randomOrNull() ?: return
 
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val flipped = prefs.getBoolean(KEY_FLIPPED + appWidgetId, false)
+
     val views = RemoteViews(context.packageName, R.layout.new_app_widget)
+    views.setTextViewText(R.id.widget_deck, word.deck)
     views.setTextViewText(R.id.widget_word, word.word)
-    views.setTextViewText(
-        R.id.widget_definition,
-        word.definition ?: "Definition coming soon"
-    )
-    views.setTextViewText(
-        R.id.widget_deck,
-        word.deck
-    )
-    if (word.example != null) {
-        views.setTextViewText(R.id.widget_example, "\u201C${word.example}\u201D")
-        views.setViewVisibility(R.id.widget_example, android.view.View.VISIBLE)
+
+    if (flipped) {
+        // Back: word + definition + example, bar says "Tap to go back"
+        views.setTextViewText(
+            R.id.widget_definition,
+            word.definition ?: "Definition coming soon"
+        )
+        views.setViewVisibility(R.id.widget_definition, View.VISIBLE)
+        views.setTextViewText(
+            R.id.widget_example,
+            word.example?.let { "\u201C$it\u201D" } ?: "Example coming soon"
+        )
+        views.setViewVisibility(R.id.widget_example, View.VISIBLE)
+        views.setTextViewText(R.id.widget_reveal_bar, context.getString(R.string.tap_to_go_back))
     } else {
-        views.setViewVisibility(R.id.widget_example, android.view.View.GONE)
+        // Front: word only, bar says "Tap to see meaning →"
+        views.setViewVisibility(R.id.widget_definition, View.GONE)
+        views.setViewVisibility(R.id.widget_example, View.GONE)
+        views.setTextViewText(
+            R.id.widget_reveal_bar,
+            context.getString(R.string.tap_to_see_meaning)
+        )
     }
 
-    val nextIntent = Intent(context, NewAppWidget::class.java).apply {
-        action = ACTION_NEXT_WORD
+    val flipIntent = Intent(context, NewAppWidget::class.java).apply {
+        action = ACTION_FLIP
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
     }
     val pendingIntent = PendingIntent.getBroadcast(
         context,
         appWidgetId,
-        nextIntent,
+        flipIntent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-    views.setOnClickPendingIntent(R.id.widget_next, pendingIntent)
+    views.setOnClickPendingIntent(R.id.widget_reveal_bar, pendingIntent)
 
     appWidgetManager.updateAppWidget(appWidgetId, views)
 }
 
-private const val ACTION_NEXT_WORD = "com.example.myapplication.action.NEXT_WORD"
+private const val PREFS_NAME = "vocab_widget_prefs"
+private const val KEY_FLIPPED = "flipped_"
+private const val ACTION_FLIP = "com.example.myapplication.action.FLIP"
