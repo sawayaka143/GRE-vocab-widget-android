@@ -1,39 +1,41 @@
 package com.example.myapplication
 
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.content.Intent
 import android.widget.RemoteViews
+import com.example.myapplication.data.WordRepository
 
 /**
- * Implementation of App Widget functionality.
- * App Widget Configuration implemented in [NewAppWidgetConfigureActivity]
+ * GRE vocab home-screen widget.
+ * Shows a random word (with definition/example when available) from the bundled decks.
+ * Tap "Next" to show another random word.
  */
 class NewAppWidget : AppWidgetProvider() {
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        // There may be multiple widgets active, so update all of them
         for (appWidgetId in appWidgetIds) {
             updateAppWidget(context, appWidgetManager, appWidgetId)
         }
     }
 
-    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
-        // When the user deletes the widget, delete the preference associated with it.
-        for (appWidgetId in appWidgetIds) {
-            deleteTitlePref(context, appWidgetId)
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        if (intent.action == ACTION_NEXT_WORD) {
+            val widgetId = intent.getIntExtra(
+                AppWidgetManager.EXTRA_APPWIDGET_ID,
+                AppWidgetManager.INVALID_APPWIDGET_ID
+            )
+            if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                updateAppWidget(context, AppWidgetManager.getInstance(context), widgetId)
+            }
         }
-    }
-
-    override fun onEnabled(context: Context) {
-        // Enter relevant functionality for when the first widget is created
-    }
-
-    override fun onDisabled(context: Context) {
-        // Enter relevant functionality for when the last widget is disabled
     }
 }
 
@@ -42,11 +44,41 @@ internal fun updateAppWidget(
     appWidgetManager: AppWidgetManager,
     appWidgetId: Int
 ) {
-    val widgetText = loadTitlePref(context, appWidgetId)
-    // Construct the RemoteViews object
-    val views = RemoteViews(context.packageName, R.layout.new_app_widget)
-    views.setTextViewText(R.id.appwidget_text, widgetText)
+    val repository = WordRepository(context)
+    val decks = repository.loadDecks()
+    val allWords = decks.flatMap { it.words }
+    val word = allWords.randomOrNull() ?: return
 
-    // Instruct the widget manager to update the widget
+    val views = RemoteViews(context.packageName, R.layout.new_app_widget)
+    views.setTextViewText(R.id.widget_word, word.word)
+    views.setTextViewText(
+        R.id.widget_definition,
+        word.definition ?: "Definition coming soon"
+    )
+    views.setTextViewText(
+        R.id.widget_deck,
+        word.deck
+    )
+    if (word.example != null) {
+        views.setTextViewText(R.id.widget_example, "\u201C${word.example}\u201D")
+        views.setViewVisibility(R.id.widget_example, android.view.View.VISIBLE)
+    } else {
+        views.setViewVisibility(R.id.widget_example, android.view.View.GONE)
+    }
+
+    val nextIntent = Intent(context, NewAppWidget::class.java).apply {
+        action = ACTION_NEXT_WORD
+        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+    }
+    val pendingIntent = PendingIntent.getBroadcast(
+        context,
+        appWidgetId,
+        nextIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    views.setOnClickPendingIntent(R.id.widget_next, pendingIntent)
+
     appWidgetManager.updateAppWidget(appWidgetId, views)
 }
+
+private const val ACTION_NEXT_WORD = "com.example.myapplication.action.NEXT_WORD"

@@ -4,13 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.example.myapplication.data.Deck
+import com.example.myapplication.data.ProgressStore
+import com.example.myapplication.data.WordRepository
+import com.example.myapplication.ui.DeckListScreen
+import com.example.myapplication.ui.FlashcardScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -19,29 +21,25 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
+                val repository = remember { WordRepository(applicationContext) }
+                val progressStore = remember { ProgressStore(applicationContext) }
+                var selectedDeck by remember { mutableStateOf<Deck?>(null) }
+
+                val deck = selectedDeck
+                if (deck == null) {
+                    DeckListScreen(
+                        decks = repository.loadDecks(),
+                        progressStore = progressStore,
+                        onPracticeDeck = { selectedDeck = it }
+                    )
+                } else {
+                    FlashcardScreen(
+                        deck = deck,
+                        progressStore = progressStore,
+                        onBack = { selectedDeck = null }
                     )
                 }
             }
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    MyApplicationTheme {
-        Greeting("Android")
     }
 }

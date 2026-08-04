@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(adb:*)",
+      "Shell(C:\\Users\\esken\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe:*)",
+      "Shell(findstr:*)",
+      "Shell(gradlew.bat:*)",
+      "Shell(dir \"C:\\Program Files\\Android\\Android Studio\\jbr\\bin\\java.exe\" 2>nul & dir \"C:\\Program Files\\Android\\Android Studio\\jre\\bin\\java.exe\" 2>nul & dir \"%USERPROFILE%\\AppData\\Local\\Programs\\Android Studio\\jbr\\bin\\java.exe\" 2>nul)",
+      "Shell(set:*)",
+      "Shell(\"C:\\Users\\esken\\AppData\\Local\\Android\\Sdk\\build-tools\" 2>nul & dir \"C:\\Users\\esken\\AppData\\Local\\Android\\Sdk\\build-tools\")",
+      "Shell(C:\\Users\\esken\\AppData\\Local\\Android\\Sdk\\build-tools\\36.0.0\\aapt.exe:*)",
+      "Shell(del:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

@@ -1,7 +1,9 @@
 <resources>
-    <string name="app_name">My Application</string>
-    <string name="appwidget_text">EXAMPLE</string>
-    <string name="configure">Configure</string>
-    <string name="add_widget">Add widget</string>
-    <string name="app_widget_description">This is an app widget description</string>
+    <string name="app_name">GRE Vocab</string>
+    <string name="app_widget_description">Random GRE word</string>
+    <string name="widget_deck_default">GRE Vocab</string>
+    <string name="widget_word_default">aberration</string>
+    <string name="widget_definition_default">Definition coming soon</string>
+    <string name="widget_example_default">Example</string>
+    <string name="widget_next">Next →</string>
 </resources>
