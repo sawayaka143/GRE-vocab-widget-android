@@ -39,6 +39,7 @@ import com.example.myapplication.data.Deck
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordState
+import com.example.myapplication.data.WordPicker
 import com.example.myapplication.ui.theme.MagooshAmber
 import com.example.myapplication.ui.theme.MagooshBlue
 import com.example.myapplication.ui.theme.MagooshGreen
@@ -49,14 +50,18 @@ fun FlashcardScreen(
     progressStore: ProgressStore,
     onBack: () -> Unit
 ) {
-    var currentIndex by remember { mutableStateOf(0) }
+    var currentWord by remember { mutableStateOf<Word?>(null) }
     var flipped by remember { mutableStateOf(false) }
     // Observe revision so progress recomposes when the widget (or app) changes it.
-    val revision by progressStore.revision
+    progressStore.revision.intValue
     // Only advance when there are words; an empty deck must not divide by zero.
     val total = deck.words.size
-    val safeAdvance: () -> Unit = {
-        if (total > 0) currentIndex = (currentIndex + 1) % total
+    // Weighted-random next word (NEW/LEARNING/REVIEWING, skip MASTERED while possible).
+    val picker = remember(progressStore) { WordPicker(progressStore) }
+    val advance: () -> Unit = {
+        if (total > 0) {
+            currentWord = picker.pickNext(deck.words, exclude = currentWord?.word)
+        }
     }
     // Guard against empty decks.
     if (total == 0) {
@@ -75,8 +80,14 @@ fun FlashcardScreen(
         }
         return
     }
-    val currentWord = deck.words[currentIndex]
-    val state = progressStore.stateOf(currentWord.word)
+    // Start with a random word on first composition.
+    val started = remember { mutableStateOf(false) }
+    if (!started.value) {
+        started.value = true
+        currentWord = picker.pickNext(deck.words)
+    }
+    val word = currentWord ?: return
+    val state = progressStore.stateOf(word.word)
     val (mastered, reviewing, learning) = progressStore.countsFor(deck)
 
     Surface(
@@ -119,19 +130,19 @@ fun FlashcardScreen(
 
             // The flashcard
             Flashcard(
-                word = currentWord,
+                word = word,
                 state = state,
                 flipped = flipped,
                 onFlip = { flipped = !flipped },
                 onKnew = {
-                    progressStore.markKnew(currentWord.word)
+                    progressStore.markKnew(word.word)
                     flipped = false
-                    safeAdvance()
+                    advance()
                 },
                 onDidntKnow = {
-                    progressStore.markDidntKnow(currentWord.word)
+                    progressStore.markDidntKnow(word.word)
                     flipped = false
-                    safeAdvance()
+                    advance()
                 }
             )
 

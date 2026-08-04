@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.RemoteViews
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.Word
+import com.example.myapplication.data.WordPicker
 import com.example.myapplication.data.WordRepository
 import com.example.myapplication.data.WordState
 
@@ -174,17 +175,10 @@ private fun currentWordFor(
     return word
 }
 
-/** Picks a random word different from [exclude]. */
+/** Picks a random word different from [exclude], weighted by learning state. */
 private fun nextRandomWord(context: Context, exclude: String?): Word? {
     val allWords = WordRepository(context).loadDecks().flatMap { it.words }
-    if (allWords.isEmpty()) return null
-    if (allWords.size == 1) return allWords.first()
-
-    var candidate = allWords.random()
-    while (candidate.word == exclude) {
-        candidate = allWords.random()
-    }
-    return candidate
+    return WordPicker(ProgressStore(context)).pickNext(allWords, exclude)
 }
 
 private const val PREFS_NAME = "vocab_widget_prefs"
