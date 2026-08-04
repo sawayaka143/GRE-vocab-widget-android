@@ -60,7 +60,7 @@ fun FlashcardScreen(
     // Only advance when there are words; an empty deck must not divide by zero.
     val total = deck.words.size
     // Weighted-random next word (NEW/LEARNING/REVIEWING, skip MASTERED while possible).
-    val picker = remember(progressStore) { WordPicker(progressStore) }
+    val picker = remember(progressStore) { WordPicker(progressStore::stateOf) }
     val advance: () -> Unit = {
         if (total > 0) {
             currentWord = picker.pickNext(deck.words, exclude = currentWord?.word)

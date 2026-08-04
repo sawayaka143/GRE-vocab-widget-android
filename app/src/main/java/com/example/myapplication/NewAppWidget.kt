@@ -178,7 +178,7 @@ private fun currentWordFor(
 /** Picks a random word different from [exclude], weighted by learning state. */
 private fun nextRandomWord(context: Context, exclude: String?): Word? {
     val allWords = WordRepository(context).loadDecks().flatMap { it.words }
-    return WordPicker(ProgressStore(context)).pickNext(allWords, exclude)
+    return WordPicker(ProgressStore(context)::stateOf).pickNext(allWords, exclude)
 }
 
 private const val PREFS_NAME = "vocab_widget_prefs"

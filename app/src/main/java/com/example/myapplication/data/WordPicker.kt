@@ -17,7 +17,10 @@ import kotlin.random.Random
  * The penalty is never a hard exclusion — on a small deck a recent word can still
  * win, avoiding deadlocks.
  */
-class WordPicker(private val progress: ProgressStore, private val random: Random = Random.Default) {
+class WordPicker(
+    private val stateOf: (String) -> WordState,
+    private val random: Random = Random.Default
+) {
 
     private val recent = ArrayDeque<String>()
 
@@ -27,7 +30,7 @@ class WordPicker(private val progress: ProgressStore, private val random: Random
 
         // Weight by learning state, then apply the recency penalty.
         val weighted = words.map { word ->
-            val base = when (progress.stateOf(word.word)) {
+            val base = when (stateOf(word.word)) {
                 WordState.NEW -> NEW_WEIGHT
                 WordState.LEARNING -> LEARNING_WEIGHT
                 WordState.REVIEWING -> REVIEWING_WEIGHT
@@ -49,11 +52,17 @@ class WordPicker(private val progress: ProgressStore, private val random: Random
         if (pool.isEmpty()) return null
 
         val totalWeight = pool.sumOf { it.second }
-        var roll = random.nextInt(totalWeight)
-        val picked = pool.firstOrNull { (_, weight) ->
-            roll -= weight
-            roll < 0
-        }?.first ?: pool.first().first
+        val picked = if (totalWeight > 0) {
+            var roll = random.nextInt(totalWeight)
+            pool.firstOrNull { (_, weight) ->
+                roll -= weight
+                roll < 0
+            }?.first ?: pool.first().first
+        } else {
+            // Every candidate is mastered (weight 0): cycle through them uniformly.
+            // nextInt(0) would throw, so pick an index instead.
+            pool[random.nextInt(pool.size)].first
+        }
 
         // Remember this pick (bounded), so it backs off for the next few selections.
         recent.remove(picked.word)
