@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">GRE Vocab</string>
+    <string name="app_name">Word Goblin</string>
     <string name="app_widget_description">Random GRE word</string>
     <string name="app_widget_lock_screen_description">GRE word — tap for definition</string>
     <string name="app_widget_random_word_description">Random GRE word — tap for definition</string>
