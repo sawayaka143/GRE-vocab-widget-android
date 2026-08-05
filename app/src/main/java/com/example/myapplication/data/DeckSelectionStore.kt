@@ -2,12 +2,16 @@ package com.example.myapplication.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.compose.runtime.mutableIntStateOf
 
 /** Persists which decks are selected (checked) to feed the widget. */
 class DeckSelectionStore(context: Context) {
 
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences("deck_selection", Context.MODE_PRIVATE)
+
+    /** Bumped on every selection change; observe to force UI recomposition. */
+    val revision = mutableIntStateOf(0)
 
     fun selectedDeckNames(): Set<String> =
         prefs.getStringSet(KEY_SELECTED, emptySet()) ?: emptySet()
@@ -18,6 +22,7 @@ class DeckSelectionStore(context: Context) {
         val current = selectedDeckNames().toMutableSet()
         if (selected) current.add(deckName) else current.remove(deckName)
         prefs.edit().putStringSet(KEY_SELECTED, current).apply()
+        revision.intValue++
     }
 
     /** True if no decks are selected yet (first run) — caller should default-select all. */

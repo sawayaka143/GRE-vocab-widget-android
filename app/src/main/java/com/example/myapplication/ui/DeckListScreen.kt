@@ -54,6 +54,8 @@ fun DeckListScreen(
     // Observe revisions so the list recomposes when progress changes (e.g. from the widget).
     progressStore.revision.intValue
     quizProgressStore.revision.intValue
+    selectionStore.revision.intValue
+    val selectableDecks = decks.filterNot { it.name.startsWith("Common Words - Fill in the Blank") }
     val selectedCount = selectionStore.selectedDeckNames().size
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -82,11 +84,13 @@ fun DeckListScreen(
             )
 
             decks.forEach { deck ->
+                val isQuizDeck = deck.name.startsWith("Common Words - Fill in the Blank")
                 DeckCard(
                     deck = deck,
                     progressStore = progressStore,
                     quizProgressStore = quizProgressStore,
-                    checked = selectionStore.isSelected(deck.name),
+                    checked = !isQuizDeck && selectionStore.isSelected(deck.name),
+                    selectable = !isQuizDeck,
                     onCheckedChange = { checked -> selectionStore.setSelected(deck.name, checked) },
                     onPractice = { onPracticeDeck(deck) }
                 )
@@ -96,7 +100,7 @@ fun DeckListScreen(
 
             Text(
                 text = if (selectedCount == 0) "No decks selected — widget will use all decks"
-                else "Selected: $selectedCount of ${decks.size} decks feed the widget",
+                else "Selected: $selectedCount of ${selectableDecks.size} decks feed the widget",
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 fontSize = 13.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -111,6 +115,7 @@ private fun DeckCard(
     progressStore: ProgressStore,
     quizProgressStore: QuizProgressStore,
     checked: Boolean,
+    selectable: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     onPractice: () -> Unit
 ) {
@@ -144,7 +149,8 @@ private fun DeckCard(
             ) {
                 Checkbox(
                     checked = checked,
-                    onCheckedChange = onCheckedChange,
+                    onCheckedChange = if (selectable) onCheckedChange else null,
+                    enabled = selectable,
                     modifier = Modifier.padding(start = 8.dp)
                 )
                 Text(

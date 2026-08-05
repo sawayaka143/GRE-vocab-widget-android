@@ -39,13 +39,9 @@ class NewAppWidget : AppWidgetProvider() {
         appWidgetIds: IntArray
     ) {
         // Rotate to a new word on every system-triggered widget update. onUpdate()
-        // is called by the system when the screen turns on and on the periodic
-        // APPWIDGET_UPDATE schedule — NOT subject to the Samsung broadcast
-        // delivery issue that blocks USER_PRESENT/SCREEN_ON. No gap check: each
-        // callback rotates, which is exactly "turn screen off/on -> new word".
-        if (!keyguardLocked(context)) {
-            rotateWidgetsForDeviceEvent(context)
-        }
+        // is called by the system on the periodic APPWIDGET_UPDATE schedule and
+        // on widget placement. Rotates unconditionally so the word always changes.
+        rotateWidgetsForDeviceEvent(context)
 
         for (appWidgetId in appWidgetIds) {
             updateAppWidget(context, appWidgetManager, appWidgetId)
@@ -76,14 +72,6 @@ class NewAppWidget : AppWidgetProvider() {
                 nextRandomWordAcrossDecks(context, decks, current)?.let {
                     session.setCurrentWord(it.deck, it)
                 }
-            }
-
-            ACTION_CYCLE_DECK -> {
-                if (decks.isEmpty()) return
-                val selected = selectedDecks(context, decks)
-                val idx = selected.indexOfFirst { it.name == active }
-                val next = selected[(idx + 1) % selected.size].name
-                session.setActiveDeck(next)
             }
 
             ACTION_TOGGLE_LEARNED -> {
@@ -156,15 +144,11 @@ internal fun updateAppWidget(
         )
     }
 
-    // Tap word -> next random word in the active deck
+    // Tap anywhere on the widget (except the bar/checkbox) -> next random word.
+    // The root is a single large target, so taps are reliable.
     views.setOnClickPendingIntent(
-        R.id.widget_word,
+        R.id.widget_root,
         buildPendingIntent(context, appWidgetId, ACTION_NEXT)
-    )
-    // Tap deck name -> cycle the active deck
-    views.setOnClickPendingIntent(
-        R.id.widget_deck,
-        buildPendingIntent(context, appWidgetId, ACTION_CYCLE_DECK)
     )
     // Tap bottom bar -> flip
     views.setOnClickPendingIntent(
@@ -199,7 +183,10 @@ internal fun rotateWidgetsForDeviceEvent(context: Context) {
     val decks = WordRepository(context).loadDecks()
     val selected = selectedDecks(context, decks)
     if (selected.isNotEmpty()) {
-        nextRandomWordAcrossDecks(context, selected, session.currentWordName(selected.first().name))?.let {
+        // Exclude the ACTIVE deck's session word — that's what the main widget shows.
+        val activeName = session.activeDeck() ?: selected.first().name
+        val exclude = session.currentWordName(activeName)
+        nextRandomWordAcrossDecks(context, selected, exclude)?.let {
             session.setCurrentWord(it.deck, it)
         }
     }
@@ -236,17 +223,26 @@ internal fun selectedDecks(context: Context, allDecks: List<Deck>): List<Deck> {
 }
 
 /**
- * Picks a random word from the union of [decks] (uniformly random deck choice,
- * then the deck's weighted picker), different from [exclude].
+ * Picks a random word from the union of [decks], GUARANTEED different from
+ * [exclude] when any other word exists. WordPicker's recency penalty is soft
+ * (a recent word can still win), so we hard-exclude here by retrying.
  */
 internal fun nextRandomWordAcrossDecks(context: Context, decks: List<Deck>, exclude: String?): Word? {
     if (decks.isEmpty()) return null
     val picker = WordPicker(ProgressStore(context)::stateOf)
+    val candidates = decks.flatMap { it.words }
+    if (candidates.isEmpty()) return null
+    if (candidates.size == 1) return candidates.first()
+
+    // Try each deck; if the pick equals the excluded word, keep trying.
     val shuffled = decks.shuffled()
-    for (deck in shuffled) {
-        picker.pickNext(deck.words, exclude)?.let { return it }
+    for (attempt in 0 until shuffled.size) {
+        val deck = shuffled[attempt % shuffled.size]
+        val picked = picker.pickNext(deck.words, exclude) ?: continue
+        if (picked.word != exclude) return picked
     }
-    return null
+    // Fallback: any word that isn't the excluded one.
+    return candidates.firstOrNull { it.word != exclude } ?: candidates.first()
 }
 
 internal fun widgetStatusColor(state: WordState): Int = when (state) {
@@ -279,5 +275,4 @@ internal fun abbreviateDeck(name: String): String {
 
 private const val ACTION_FLIP = "com.example.myapplication.action.FLIP"
 private const val ACTION_NEXT = "com.example.myapplication.action.NEXT"
-private const val ACTION_CYCLE_DECK = "com.example.myapplication.action.CYCLE_DECK"
 private const val ACTION_TOGGLE_LEARNED = "com.example.myapplication.action.TOGGLE_LEARNED"
