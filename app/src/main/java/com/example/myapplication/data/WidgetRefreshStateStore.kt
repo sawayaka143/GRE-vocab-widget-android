@@ -31,8 +31,13 @@ class WidgetRefreshStateStore(context: Context) {
                 Settings.Global.BOOT_COUNT
             ).toLong()
         }.getOrDefault(-1L)
+
+        // If BOOT_COUNT can't be read (SELinux/Android 13+), treat it as an
+        // unknown boot and force a rotation instead of suppressing via -1 == -1.
+        val unknownBoot = bootId == -1L
+
         val lastHandledBoot = prefs.getLong(KEY_LAST_HANDLED_BOOT, Long.MIN_VALUE)
-        if (bootId == lastHandledBoot) return false
+        if (!unknownBoot && bootId == lastHandledBoot) return false
 
         prefs.edit()
             .putLong(KEY_LAST_HANDLED_BOOT, bootId)

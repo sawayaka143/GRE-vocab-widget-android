@@ -1,5 +1,10 @@
 package com.example.myapplication
 
+import android.app.KeyguardManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,6 +17,7 @@ import com.example.myapplication.data.Deck
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.QuizProgressStore
 import com.example.myapplication.data.SessionStore
+import com.example.myapplication.data.WidgetRefreshStateStore
 import com.example.myapplication.data.WordRepository
 import com.example.myapplication.ui.DeckListScreen
 import com.example.myapplication.ui.FlashcardScreen
@@ -19,9 +25,31 @@ import com.example.myapplication.ui.QuizScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Dynamically registered receiver for screen events. SCREEN_ON/SCREEN_OFF
+     * cannot be received via manifest registration on Android 8+ (implicit
+     * broadcast ban), so we register in code while the app is running. On
+     * screen-on, rotate the widget to a new word.
+     */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> WidgetRefreshStateStore(context).markScreenOff()
+                Intent.ACTION_SCREEN_ON -> {
+                    val km = context.getSystemService(KeyguardManager::class.java)
+                    if (km?.isKeyguardLocked() != true) {
+                        rotateWidgetsForDeviceEvent(context)
+                    }
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        registerScreenReceiver()
         setContent {
             MyApplicationTheme {
                 val repository = remember { WordRepository(applicationContext) }
@@ -57,5 +85,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** Registers the screen receiver once (in onCreate) so it survives screen-off. */
+    private fun registerScreenReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
     }
 }

@@ -36,6 +36,15 @@ class NewAppWidget : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
+        // Rotate to a new word on every system-triggered widget update. onUpdate()
+        // is called by the system when the screen turns on and on the periodic
+        // APPWIDGET_UPDATE schedule — NOT subject to the Samsung broadcast
+        // delivery issue that blocks USER_PRESENT/SCREEN_ON. No gap check: each
+        // callback rotates, which is exactly "turn screen off/on -> new word".
+        if (!keyguardLocked(context)) {
+            rotateWidgetsForDeviceEvent(context)
+        }
+
         for (appWidgetId in appWidgetIds) {
             updateAppWidget(context, appWidgetManager, appWidgetId)
         }
@@ -169,15 +178,9 @@ internal fun updateAppWidget(
 /** Re-renders every placed widget after shared state changes. */
 internal fun updateAllWidgets(context: Context) {
     val manager = AppWidgetManager.getInstance(context)
-    for (provider in listOf(NewAppWidget::class.java, LockScreenWidget::class.java)) {
-        val ids = manager.getAppWidgetIds(ComponentName(context, provider))
-        for (widgetId in ids) {
-            if (provider == NewAppWidget::class.java) {
-                updateAppWidget(context, manager, widgetId)
-            } else {
-                updateLockScreenWidget(context, manager, widgetId)
-            }
-        }
+    val newIds = manager.getAppWidgetIds(ComponentName(context, NewAppWidget::class.java))
+    for (widgetId in newIds) {
+        updateAppWidget(context, manager, widgetId)
     }
     val randomIds = manager.getAppWidgetIds(ComponentName(context, RandomWordWidget::class.java))
     for (widgetId in randomIds) {
