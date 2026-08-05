@@ -12,7 +12,6 @@ import com.example.myapplication.data.Deck
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.QuizProgressStore
 import com.example.myapplication.data.SessionStore
-import com.example.myapplication.data.SettingsStore
 import com.example.myapplication.data.WordRepository
 import com.example.myapplication.ui.DeckListScreen
 import com.example.myapplication.ui.FlashcardScreen
@@ -29,7 +28,6 @@ class MainActivity : ComponentActivity() {
                 val progressStore = remember { ProgressStore(applicationContext) }
                 val quizProgressStore = remember { QuizProgressStore(applicationContext) }
                 val sessionStore = remember { SessionStore(applicationContext) }
-                val settingsStore = remember { SettingsStore(applicationContext) }
                 var selectedDeck by remember { mutableStateOf<Deck?>(null) }
 
                 val deck = selectedDeck
@@ -54,7 +52,6 @@ class MainActivity : ComponentActivity() {
                         deck = deck,
                         progressStore = progressStore,
                         sessionStore = sessionStore,
-                        settingsStore = settingsStore,
                         onBack = { selectedDeck = null }
                     )
                 }
