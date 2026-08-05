@@ -1,5 +1,6 @@
 package com.example.myapplication
 
+import android.app.KeyguardManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -73,6 +74,9 @@ class NewAppWidget : AppWidgetProvider() {
             }
 
             ACTION_TOGGLE_LEARNED -> {
+                // Don't mutate learning progress while the device is locked —
+                // accidental pocket taps shouldn't mark words as mastered.
+                if (keyguardLocked(context)) return
                 val word = session.currentWordName(active) ?: return
                 val progress = ProgressStore(context)
                 if (progress.stateOf(word) == WordState.MASTERED) {
@@ -187,6 +191,10 @@ internal fun nextRandomWordForDeck(context: Context, deckName: String, exclude: 
     val deck = WordRepository(context).loadDecks().firstOrNull { it.name == deckName } ?: return null
     return WordPicker(ProgressStore(context)::stateOf).pickNext(deck.words, exclude)
 }
+
+/** True when the device is locked (keyguard showing). */
+private fun keyguardLocked(context: Context): Boolean =
+    context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked() ?: false
 
 private const val ACTION_FLIP = "com.example.myapplication.action.FLIP"
 private const val ACTION_NEXT = "com.example.myapplication.action.NEXT"
