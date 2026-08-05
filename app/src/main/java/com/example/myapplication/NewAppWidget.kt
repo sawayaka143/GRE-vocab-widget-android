@@ -57,6 +57,7 @@ class NewAppWidget : AppWidgetProvider() {
 
         val session = SessionStore(context)
         val decks = WordRepository(context).loadDecks()
+        val recentStore = RandomWordWidgetStore(context)
         val active = session.activeDeck()
             ?: decks.firstOrNull()?.name
             ?: return
@@ -68,7 +69,13 @@ class NewAppWidget : AppWidgetProvider() {
 
             ACTION_NEXT -> {
                 val current = session.currentWordName(active)
-                nextRandomWordAcrossDecks(context, selectedDecks(context, decks), current)?.let {
+                nextRandomWordAcrossDecks(
+                    context,
+                    selectedDecks(context, decks),
+                    current,
+                    recentWords = recentStore.recentWords(widgetId),
+                    onPicked = { recentStore.pushRecentWord(widgetId, it.word) }
+                )?.let {
                     session.setCurrentWord(it.deck, it)
                     session.setActiveDeck(it.deck)
                 }
@@ -192,22 +199,37 @@ internal fun rotateWidgetsForDeviceEvent(context: Context) {
     val session = SessionStore(context)
     val decks = WordRepository(context).loadDecks()
     val selected = selectedDecks(context, decks)
+    val manager = AppWidgetManager.getInstance(context)
+    val store = RandomWordWidgetStore(context)
     if (selected.isNotEmpty()) {
         // Exclude the ACTIVE deck's session word — that's what the main widget shows.
         val activeName = session.activeDeck() ?: selected.first().name
         val exclude = session.currentWordName(activeName)
-        nextRandomWordAcrossDecks(context, selected, exclude)?.let {
-            session.setCurrentWord(it.deck, it)
-            session.setActiveDeck(it.deck)
+        val mainIds = manager.getAppWidgetIds(ComponentName(context, NewAppWidget::class.java))
+        mainIds.forEach { widgetId ->
+            nextRandomWordAcrossDecks(
+                context,
+                selected,
+                exclude,
+                recentWords = store.recentWords(widgetId),
+                onPicked = { store.pushRecentWord(widgetId, it.word) }
+            )?.let {
+                session.setCurrentWord(it.deck, it)
+                session.setActiveDeck(it.deck)
+            }
         }
     }
 
-    val manager = AppWidgetManager.getInstance(context)
-    val store = RandomWordWidgetStore(context)
     val randomIds = manager.getAppWidgetIds(ComponentName(context, RandomWordWidget::class.java))
     for (widgetId in randomIds) {
         val current = store.currentWordName(widgetId)
-        nextRandomWordAcrossDecks(context, selected, current)?.let {
+        nextRandomWordAcrossDecks(
+            context,
+            selected,
+            current,
+            recentWords = store.recentWords(widgetId),
+            onPicked = { store.pushRecentWord(widgetId, it.word) }
+        )?.let {
             store.setCurrentWord(widgetId, it.word)
         }
     }
@@ -244,10 +266,20 @@ internal fun selectedDecks(context: Context, allDecks: List<Deck>): List<Deck> {
  * Picks a random word from the union of [decks], GUARANTEED different from
  * [exclude] when any other word exists. WordPicker's recency penalty is soft
  * (a recent word can still win), so we hard-exclude here by retrying.
+ *
+ * [recentWords] seeds the picker's recency memory (so recently shown words back
+ * off across taps), and [onPicked] is invoked with the chosen word so the caller
+ * can record it in persisted history.
  */
-internal fun nextRandomWordAcrossDecks(context: Context, decks: List<Deck>, exclude: String?): Word? {
+internal fun nextRandomWordAcrossDecks(
+    context: Context,
+    decks: List<Deck>,
+    exclude: String?,
+    recentWords: List<String> = emptyList(),
+    onPicked: ((Word) -> Unit)? = null
+): Word? {
     if (decks.isEmpty()) return null
-    val picker = WordPicker(ProgressStore(context)::stateOf)
+    val picker = WordPicker(ProgressStore(context)::stateOf, initialRecent = recentWords)
     val candidates = decks.flatMap { it.words }
     if (candidates.isEmpty()) return null
     if (candidates.size == 1) return candidates.first()
@@ -257,10 +289,15 @@ internal fun nextRandomWordAcrossDecks(context: Context, decks: List<Deck>, excl
     for (attempt in 0 until shuffled.size) {
         val deck = shuffled[attempt % shuffled.size]
         val picked = picker.pickNext(deck.words, exclude) ?: continue
-        if (picked.word != exclude) return picked
+        if (picked.word != exclude) {
+            onPicked?.invoke(picked)
+            return picked
+        }
     }
     // Fallback: any word that isn't the excluded one.
-    return candidates.firstOrNull { it.word != exclude } ?: candidates.first()
+    val fallback = candidates.firstOrNull { it.word != exclude } ?: candidates.first()
+    onPicked?.invoke(fallback)
+    return fallback
 }
 
 internal fun widgetStatusColor(state: WordState): Int = when (state) {

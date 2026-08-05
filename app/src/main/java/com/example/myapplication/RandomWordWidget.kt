@@ -46,7 +46,13 @@ class RandomWordWidget : AppWidgetProvider() {
                     // Already showing the definition -> show a new random word.
                     val decks = selectedDecks(context, WordRepository(context).loadDecks())
                     val current = store.currentWordName(widgetId)
-                    nextRandomWordAcrossDecks(context, decks, current)?.let {
+                    nextRandomWordAcrossDecks(
+                        context,
+                        decks,
+                        current,
+                        recentWords = store.recentWords(widgetId),
+                        onPicked = { store.pushRecentWord(widgetId, it.word) }
+                    )?.let {
                         store.setCurrentWord(widgetId, it.word)
                     }
                 } else {
@@ -72,7 +78,13 @@ internal fun updateRandomWordWidget(
     // Resolve this widget's stored word; seed a random one if missing/stale.
     val stored = store.currentWordName(appWidgetId)
     val word = decks.flatMap { it.words }.firstOrNull { it.word == stored }
-        ?: nextRandomWordAcrossDecks(context, decks, stored)?.also {
+        ?: nextRandomWordAcrossDecks(
+            context,
+            decks,
+            stored,
+            recentWords = store.recentWords(appWidgetId),
+            onPicked = { store.pushRecentWord(appWidgetId, it.word) }
+        )?.also {
             store.setCurrentWord(appWidgetId, it.word)
         }
         ?: return

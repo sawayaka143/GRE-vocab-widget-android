@@ -34,10 +34,30 @@ class RandomWordWidgetStore(context: Context) {
         prefs.edit().putBoolean(key(KEY_FLIPPED, widgetId), flipped).apply()
     }
 
+    /** Recently shown words for this widget, oldest first. Bounded to [MAX_RECENT]. */
+    fun recentWords(widgetId: Int): List<String> =
+        prefs.getString(key(KEY_RECENT, widgetId), null)
+            ?.split(RECENT_DELIMITER)
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+
+    /** Records a shown word, deduping and keeping only the most recent [MAX_RECENT]. */
+    fun pushRecentWord(widgetId: Int, word: String) {
+        val updated = (listOf(word) + recentWords(widgetId).filter { it != word }).take(MAX_RECENT)
+        prefs.edit().putString(key(KEY_RECENT, widgetId), updated.joinToString(RECENT_DELIMITER)).apply()
+    }
+
     private fun key(prefix: String, widgetId: Int): String = "$prefix$widgetId"
 
     private companion object {
         const val KEY_WORD = "word_"
         const val KEY_FLIPPED = "flipped_"
+        const val KEY_RECENT = "recent_"
+
+        /** Bounded history of shown words per widget, used to seed recency. */
+        const val MAX_RECENT = 15
+
+        /** Words can't contain this char (they're single tokens), so it's a safe delimiter. */
+        const val RECENT_DELIMITER = "|"
     }
 }

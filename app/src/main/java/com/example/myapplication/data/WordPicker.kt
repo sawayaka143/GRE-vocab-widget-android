@@ -19,10 +19,11 @@ import kotlin.random.Random
  */
 class WordPicker(
     private val stateOf: (String) -> WordState,
-    private val random: Random = Random.Default
+    private val random: Random = Random.Default,
+    private val initialRecent: List<String> = emptyList()
 ) {
 
-    private val recent = ArrayDeque<String>()
+    private val recent = ArrayDeque<String>(initialRecent)
 
     /** Higher weight = appears more often. Tune these to change the feel. */
     fun pickNext(words: List<Word>, exclude: String? = null): Word? {
@@ -73,10 +74,12 @@ class WordPicker(
     }
 
     private companion object {
+        // Mastered words get a small weight so they occasionally resurface for
+        // spaced reinforcement instead of disappearing forever.
         const val NEW_WEIGHT = 5
-        const val LEARNING_WEIGHT = 3
-        const val REVIEWING_WEIGHT = 2
-        const val MASTERED_WEIGHT = 0
+        const val LEARNING_WEIGHT = 4
+        const val REVIEWING_WEIGHT = 3
+        const val MASTERED_WEIGHT = 1
 
         /** How much to shrink the weight of a word shown within the last [MAX_RECENT] picks. */
         const val RECENCY_PENALTY = 0.5f
