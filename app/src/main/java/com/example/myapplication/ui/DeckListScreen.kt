@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.Deck
 import com.example.myapplication.data.ProgressStore
+import com.example.myapplication.data.QuizProgressStore
 import com.example.myapplication.ui.theme.MagooshGreen
 
 // The gray band behind "Practice this deck →" (user-specified color).
@@ -42,10 +43,12 @@ private val ProgressTrack = Color(0xFFEEEEEF)
 fun DeckListScreen(
     decks: List<Deck>,
     progressStore: ProgressStore,
+    quizProgressStore: QuizProgressStore,
     onPracticeDeck: (Deck) -> Unit
 ) {
-    // Observe revision so the list recomposes when progress changes (e.g. from the widget).
+    // Observe revisions so the list recomposes when progress changes (e.g. from the widget).
     progressStore.revision.intValue
+    quizProgressStore.revision.intValue
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -59,14 +62,19 @@ fun DeckListScreen(
         ) {
             Text(
                 text = "GRE Vocabulary Flashcards",
-                color = DeckCardTitle,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(vertical = 12.dp)
             )
 
             decks.forEach { deck ->
-                DeckCard(deck = deck, progressStore = progressStore, onPractice = { onPracticeDeck(deck) })
+                DeckCard(
+                    deck = deck,
+                    progressStore = progressStore,
+                    quizProgressStore = quizProgressStore,
+                    onPractice = { onPracticeDeck(deck) }
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -78,11 +86,23 @@ fun DeckListScreen(
 private fun DeckCard(
     deck: Deck,
     progressStore: ProgressStore,
+    quizProgressStore: QuizProgressStore,
     onPractice: () -> Unit
 ) {
-    val (mastered, _, _) = progressStore.countsFor(deck)
+    val isQuizDeck = deck.name.startsWith("Common Words - Fill in the Blank")
     val total = deck.words.size
-    val fraction = if (total == 0) 0f else mastered.toFloat() / total
+    val (answered, fraction) = if (isQuizDeck) {
+        val answered = quizProgressStore.answeredCount(deck.name)
+        answered to if (total == 0) 0f else answered.toFloat() / total
+    } else {
+        val (mastered, _, _) = progressStore.countsFor(deck)
+        mastered to if (total == 0) 0f else mastered.toFloat() / total
+    }
+    val label = if (isQuizDeck) {
+        "$answered of $total questions answered"
+    } else {
+        "$answered of $total words mastered"
+    }
 
     Card(
         modifier = Modifier
@@ -104,7 +124,7 @@ private fun DeckCard(
             Spacer(modifier = Modifier.height(2.dp))
 
             Text(
-                text = "$mastered of $total words mastered",
+                text = label,
                 fontSize = 14.sp,
                 color = DeckCardSubtitle,
                 modifier = Modifier.padding(horizontal = 16.dp)

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,7 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -49,8 +50,8 @@ import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordState
 import com.example.myapplication.data.WordPicker
 import com.example.myapplication.ui.theme.MagooshAmber
-import com.example.myapplication.ui.theme.MagooshBlue
 import com.example.myapplication.ui.theme.MagooshGreen
+import com.example.myapplication.ui.theme.MagooshPink
 
 @Composable
 fun FlashcardScreen(
@@ -204,7 +205,7 @@ fun FlashcardScreen(
             ProgressStat(
                 label = "You are learning $learning out of $total words",
                 fraction = if (total == 0) 0f else learning.toFloat() / total,
-                color = MagooshBlue
+                color = MagooshPink
             )
         }
     }
@@ -253,7 +254,7 @@ private fun Flashcard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(360.dp),
+            .height(if (showFlipBackBar) 400.dp else 360.dp),
         shape = RoundedCornerShape(16.dp),
         color = Color.White,
         shadowElevation = 4.dp
@@ -294,11 +295,15 @@ private fun Flashcard(
                     TapBar(text = "Tap to see meaning →", onTap = onFlip)
                 }
             } else {
-                // Back: content (badge + word + definition) padded; buttons edge-to-edge
+                // Back: content (badge + word + definition) padded; buttons edge-to-edge.
+                // With the flip-back bar shown, the bottom bars are taller, so give the
+                // content less top room to keep the definition/example visible.
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(20.dp)
+                        .padding(top = if (showFlipBackBar) 12.dp else 20.dp)
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 20.dp)
                 ) {
                     StatusBadge(state = state, modifier = Modifier.align(Alignment.End))
 
@@ -395,7 +400,7 @@ private fun Flashcard(
 }
 
 @Composable
-private fun StatusBadge(state: WordState, modifier: Modifier = Modifier) {
+internal fun StatusBadge(state: WordState, modifier: Modifier = Modifier) {
     val (label, bg, fg) = when (state) {
         WordState.MASTERED -> Triple("MASTERED", Color(0xFFBAF5CA), Color(0xFF30B961))
         WordState.REVIEWING -> Triple("REVIEWING", Color(0xFFFFE3C2), Color(0xFFEBA15A))
@@ -417,25 +422,33 @@ private fun StatusBadge(state: WordState, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ProgressStat(label: String, fraction: Float, color: Color) {
-    Column(modifier = Modifier
-        .fillMaxWidth()
-        .padding(vertical = 6.dp)) {
+internal fun ProgressStat(label: String, fraction: Float, color: Color) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
         Text(
             text = label,
             color = MaterialTheme.colorScheme.onBackground,
-            fontSize = 14.sp
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 6.dp)
         )
-        Spacer(modifier = Modifier.height(4.dp))
-        LinearProgressIndicator(
-            progress = { fraction },
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(8.dp)
-                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp)),
-            color = color,
-            trackColor = Color.White.copy(alpha = 0.15f)
-        )
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color(0xFFE6E6E6))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(color)
+            )
+        }
     }
 }
 
