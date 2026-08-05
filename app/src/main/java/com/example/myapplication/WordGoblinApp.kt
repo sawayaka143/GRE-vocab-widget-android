@@ -1,6 +1,7 @@
 package com.example.myapplication
 
 import android.app.Application
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -21,9 +22,16 @@ class WordGoblinApp : Application() {
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            val state = WidgetRefreshStateStore(context)
             when (intent.action) {
-                Intent.ACTION_SCREEN_OFF -> WidgetRefreshStateStore(context).markScreenOff()
-                Intent.ACTION_SCREEN_ON -> rotateWidgetsForDeviceEvent(context)
+                Intent.ACTION_SCREEN_OFF -> state.markScreenOff()
+                Intent.ACTION_SCREEN_ON -> {
+                    val km = context.getSystemService(KeyguardManager::class.java)
+                    if (km?.isKeyguardLocked() != true) rotateWidgetsForDeviceEvent(context)
+                }
+                Intent.ACTION_USER_PRESENT -> {
+                    if (state.consumePendingUnlock()) rotateWidgetsForDeviceEvent(context)
+                }
             }
         }
     }
@@ -33,7 +41,8 @@ class WordGoblinApp : Application() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
         }
-        registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        registerReceiver(screenReceiver, filter, RECEIVER_EXPORTED)
     }
 }

@@ -45,6 +45,7 @@
 
     <!-- Centered word area -->
     <LinearLayout
+        android:id="@+id/widget_middle_section"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"

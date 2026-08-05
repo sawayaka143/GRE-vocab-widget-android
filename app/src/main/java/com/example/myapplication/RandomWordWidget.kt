@@ -94,19 +94,19 @@ internal fun updateRandomWordWidget(
     }
 
     // Tap anywhere on the tile -> flip to definition, or advance to a new word.
+    // Set on both root and word to ensure responsiveness across all launchers.
     val tapIntent = Intent(context, RandomWordWidget::class.java).apply {
         action = ACTION_TAP
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
     }
-    views.setOnClickPendingIntent(
-        R.id.widget_root_random,
-        PendingIntent.getBroadcast(
-            context,
-            appWidgetId,
-            tapIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+    val pendingIntent = PendingIntent.getBroadcast(
+        context,
+        appWidgetId,
+        tapIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
+    views.setOnClickPendingIntent(R.id.widget_root_random, pendingIntent)
+    views.setOnClickPendingIntent(R.id.widget_word, pendingIntent)
 
     appWidgetManager.updateAppWidget(appWidgetId, views)
 }

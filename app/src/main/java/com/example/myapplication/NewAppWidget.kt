@@ -22,13 +22,12 @@ import com.example.myapplication.data.WordState
 /**
  * GRE vocab home-screen widget, fully synced with the app via [SessionStore].
  *
- * The widget shows the ACTIVE deck's shared word + flipped state. Any tap writes
- * back to the shared session (and to ProgressStore for learned), so the app mirrors
- * it when opened — and vice versa.
+ * Hybrid word source: the widget shows a random word from the SELECTED decks
+ * (like the small widget), but writes it back to the shared session and marks
+ * the picked deck as active, so the app mirrors it when opened — and vice versa.
  *
- * - Tap the word to advance the active deck to a new random word.
+ * - Tap the word area to advance to a new random word from the selected decks.
  * - Tap the bottom bar to flip between the word and its meaning.
- * - Tap the deck name to cycle the active deck.
  * - Tap "Learned" to mark the word as mastered (synced with the app).
  */
 class NewAppWidget : AppWidgetProvider() {
@@ -69,8 +68,9 @@ class NewAppWidget : AppWidgetProvider() {
 
             ACTION_NEXT -> {
                 val current = session.currentWordName(active)
-                nextRandomWordAcrossDecks(context, decks, current)?.let {
+                nextRandomWordAcrossDecks(context, selectedDecks(context, decks), current)?.let {
                     session.setCurrentWord(it.deck, it)
+                    session.setActiveDeck(it.deck)
                 }
             }
 
@@ -99,15 +99,23 @@ internal fun updateAppWidget(
 ) {
     val session = SessionStore(context)
     val decks = WordRepository(context).loadDecks()
-    val active = session.activeDeck() ?: decks.firstOrNull()?.name ?: return
     val selected = selectedDecks(context, decks)
     if (selected.isEmpty()) return
 
-    // Resolve the word to show: the active deck's shared word if that deck is
-    // selected, otherwise a fresh random word from the selected decks.
-    val word = session.currentWord(active, selected.flatMap { it.words })
+    // The ACTIVE deck is the one the widget just picked/synced; the widget's
+    // displayed word is always its session word. Resolve it fresh so tap-exclusion
+    // (and flip/learned) target the word actually on screen.
+    val activeDeck = session.activeDeck() ?: selected.first().name
+    val activeWord = session.currentWordName(activeDeck)
+        ?.let { name -> selected.flatMap { it.words }.firstOrNull { it.word == name } }
+
+    // Resolve the word to show: the shared session word for ANY selected deck
+    // (hybrid — the random pool is the selected decks), else seed a fresh random
+    // word from the selected decks.
+    val word = activeWord
         ?: nextRandomWordAcrossDecks(context, selected, null)?.also {
             session.setCurrentWord(it.deck, it)
+            session.setActiveDeck(it.deck)
         }
         ?: return
     val flipped = session.flipped(word.deck)
@@ -145,20 +153,22 @@ internal fun updateAppWidget(
     }
 
     // Tap anywhere on the widget (except the bar/checkbox) -> next random word.
-    // The root is a single large target, so taps are reliable.
-    views.setOnClickPendingIntent(
-        R.id.widget_root,
-        buildPendingIntent(context, appWidgetId, ACTION_NEXT)
-    )
+    // Explicitly set on the word area and the word itself to avoid "dead spots"
+    // on launchers that don't bubble clicks from children to the root.
+    val nextIntent = buildPendingIntent(context, appWidgetId, ACTION_NEXT, 0)
+    views.setOnClickPendingIntent(R.id.widget_root, nextIntent)
+    views.setOnClickPendingIntent(R.id.widget_middle_section, nextIntent)
+    views.setOnClickPendingIntent(R.id.widget_word, nextIntent)
+
     // Tap bottom bar -> flip
     views.setOnClickPendingIntent(
         R.id.widget_reveal_bar,
-        buildPendingIntent(context, appWidgetId, ACTION_FLIP)
+        buildPendingIntent(context, appWidgetId, ACTION_FLIP, 1)
     )
     // Tap checkbox -> toggle learned
     views.setOnClickPendingIntent(
         R.id.widget_learned,
-        buildPendingIntent(context, appWidgetId, ACTION_TOGGLE_LEARNED)
+        buildPendingIntent(context, appWidgetId, ACTION_TOGGLE_LEARNED, 2)
     )
 
     appWidgetManager.updateAppWidget(appWidgetId, views)
@@ -188,6 +198,7 @@ internal fun rotateWidgetsForDeviceEvent(context: Context) {
         val exclude = session.currentWordName(activeName)
         nextRandomWordAcrossDecks(context, selected, exclude)?.let {
             session.setCurrentWord(it.deck, it)
+            session.setActiveDeck(it.deck)
         }
     }
 
@@ -203,14 +214,21 @@ internal fun rotateWidgetsForDeviceEvent(context: Context) {
     updateAllWidgets(context)
 }
 
-private fun buildPendingIntent(context: Context, widgetId: Int, action: String): PendingIntent {
+private fun buildPendingIntent(
+    context: Context,
+    widgetId: Int,
+    action: String,
+    requestCodeOffset: Int = 0
+): PendingIntent {
     val intent = Intent(context, NewAppWidget::class.java).apply {
         this.action = action
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
     }
+    // Use unique request codes per action to prevent intent collision in the system cache.
+    val requestCode = widgetId * 10 + requestCodeOffset
     return PendingIntent.getBroadcast(
         context,
-        widgetId,
+        requestCode,
         intent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
