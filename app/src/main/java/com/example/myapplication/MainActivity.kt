@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.example.myapplication.data.Deck
+import com.example.myapplication.data.DeckSelectionStore
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.QuizProgressStore
 import com.example.myapplication.data.SessionStore
@@ -56,7 +57,14 @@ class MainActivity : ComponentActivity() {
                 val progressStore = remember { ProgressStore(applicationContext) }
                 val quizProgressStore = remember { QuizProgressStore(applicationContext) }
                 val sessionStore = remember { SessionStore(applicationContext) }
+                val selectionStore = remember { DeckSelectionStore(applicationContext) }
                 var selectedDeck by remember { mutableStateOf<Deck?>(null) }
+
+                // First run: default-select all decks so the widget has content.
+                if (selectionStore.isEmpty()) {
+                    val allDecks = repository.loadDecks()
+                    allDecks.forEach { selectionStore.setSelected(it.name, true) }
+                }
 
                 val deck = selectedDeck
                 if (deck == null) {
@@ -64,6 +72,7 @@ class MainActivity : ComponentActivity() {
                         decks = repository.loadDecks(),
                         progressStore = progressStore,
                         quizProgressStore = quizProgressStore,
+                        selectionStore = selectionStore,
                         onPracticeDeck = {
                             sessionStore.setActiveDeck(it.name)
                             selectedDeck = it

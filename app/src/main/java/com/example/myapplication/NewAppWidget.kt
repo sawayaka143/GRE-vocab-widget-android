@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.widget.RemoteViews
+import com.example.myapplication.data.Deck
+import com.example.myapplication.data.DeckSelectionStore
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.RandomWordWidgetStore
 import com.example.myapplication.data.SessionStore
@@ -71,15 +73,16 @@ class NewAppWidget : AppWidgetProvider() {
 
             ACTION_NEXT -> {
                 val current = session.currentWordName(active)
-                nextRandomWordForDeck(context, active, current)?.let {
-                    session.setCurrentWord(active, it)
+                nextRandomWordAcrossDecks(context, decks, current)?.let {
+                    session.setCurrentWord(it.deck, it)
                 }
             }
 
             ACTION_CYCLE_DECK -> {
                 if (decks.isEmpty()) return
-                val idx = decks.indexOfFirst { it.name == active }
-                val next = decks[(idx + 1) % decks.size].name
+                val selected = selectedDecks(context, decks)
+                val idx = selected.indexOfFirst { it.name == active }
+                val next = selected[(idx + 1) % selected.size].name
                 session.setActiveDeck(next)
             }
 
@@ -109,15 +112,17 @@ internal fun updateAppWidget(
     val session = SessionStore(context)
     val decks = WordRepository(context).loadDecks()
     val active = session.activeDeck() ?: decks.firstOrNull()?.name ?: return
-    val allWords = decks.flatMap { it.words }
+    val selected = selectedDecks(context, decks)
+    if (selected.isEmpty()) return
 
-    // Resolve the active deck's shared word; seed it on first run.
-    val word = session.currentWord(active, allWords)
-        ?: nextRandomWordForDeck(context, active, null)?.also {
-            session.setCurrentWord(active, it)
+    // Resolve the word to show: the active deck's shared word if that deck is
+    // selected, otherwise a fresh random word from the selected decks.
+    val word = session.currentWord(active, selected.flatMap { it.words })
+        ?: nextRandomWordAcrossDecks(context, selected, null)?.also {
+            session.setCurrentWord(it.deck, it)
         }
         ?: return
-    val flipped = session.flipped(active)
+    val flipped = session.flipped(word.deck)
     val wordState = ProgressStore(context).stateOf(word.word)
     val learned = wordState == WordState.MASTERED
 
@@ -192,10 +197,10 @@ internal fun updateAllWidgets(context: Context) {
 internal fun rotateWidgetsForDeviceEvent(context: Context) {
     val session = SessionStore(context)
     val decks = WordRepository(context).loadDecks()
-    val active = session.activeDeck() ?: decks.firstOrNull()?.name
-    if (active != null) {
-        nextRandomWordForDeck(context, active, session.currentWordName(active))?.let {
-            session.setCurrentWord(active, it)
+    val selected = selectedDecks(context, decks)
+    if (selected.isNotEmpty()) {
+        nextRandomWordAcrossDecks(context, selected, session.currentWordName(selected.first().name))?.let {
+            session.setCurrentWord(it.deck, it)
         }
     }
 
@@ -204,7 +209,7 @@ internal fun rotateWidgetsForDeviceEvent(context: Context) {
     val randomIds = manager.getAppWidgetIds(ComponentName(context, RandomWordWidget::class.java))
     for (widgetId in randomIds) {
         val current = store.currentWordName(widgetId)
-        nextRandomWordForDeck(context, active ?: return, current)?.let {
+        nextRandomWordAcrossDecks(context, selected, current)?.let {
             store.setCurrentWord(widgetId, it.word)
         }
     }
@@ -224,10 +229,24 @@ private fun buildPendingIntent(context: Context, widgetId: Int, action: String):
     )
 }
 
-/** Picks a random word from [deckName], different from [exclude], weighted by learning state. */
-internal fun nextRandomWordForDeck(context: Context, deckName: String, exclude: String?): Word? {
-    val deck = WordRepository(context).loadDecks().firstOrNull { it.name == deckName } ?: return null
-    return WordPicker(ProgressStore(context)::stateOf).pickNext(deck.words, exclude)
+/** The decks selected (checked) to feed the widget; falls back to all decks if none selected. */
+internal fun selectedDecks(context: Context, allDecks: List<Deck>): List<Deck> {
+    val selected = DeckSelectionStore(context).selectedDeckNames()
+    return if (selected.isEmpty()) allDecks else allDecks.filter { it.name in selected }
+}
+
+/**
+ * Picks a random word from the union of [decks] (uniformly random deck choice,
+ * then the deck's weighted picker), different from [exclude].
+ */
+internal fun nextRandomWordAcrossDecks(context: Context, decks: List<Deck>, exclude: String?): Word? {
+    if (decks.isEmpty()) return null
+    val picker = WordPicker(ProgressStore(context)::stateOf)
+    val shuffled = decks.shuffled()
+    for (deck in shuffled) {
+        picker.pickNext(deck.words, exclude)?.let { return it }
+    }
+    return null
 }
 
 internal fun widgetStatusColor(state: WordState): Int = when (state) {

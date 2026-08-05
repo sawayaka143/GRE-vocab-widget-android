@@ -3,6 +3,7 @@ package com.example.myapplication.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,12 +15,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -29,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.Deck
+import com.example.myapplication.data.DeckSelectionStore
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.QuizProgressStore
 import com.example.myapplication.ui.theme.MagooshGreen
@@ -44,11 +48,13 @@ fun DeckListScreen(
     decks: List<Deck>,
     progressStore: ProgressStore,
     quizProgressStore: QuizProgressStore,
+    selectionStore: DeckSelectionStore,
     onPracticeDeck: (Deck) -> Unit
 ) {
     // Observe revisions so the list recomposes when progress changes (e.g. from the widget).
     progressStore.revision.intValue
     quizProgressStore.revision.intValue
+    val selectedCount = selectionStore.selectedDeckNames().size
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -68,16 +74,33 @@ fun DeckListScreen(
                 modifier = Modifier.padding(vertical = 12.dp)
             )
 
+            Text(
+                text = "Check the decks that feed the home screen widget",
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
             decks.forEach { deck ->
                 DeckCard(
                     deck = deck,
                     progressStore = progressStore,
                     quizProgressStore = quizProgressStore,
+                    checked = selectionStore.isSelected(deck.name),
+                    onCheckedChange = { checked -> selectionStore.setSelected(deck.name, checked) },
                     onPractice = { onPracticeDeck(deck) }
                 )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = if (selectedCount == 0) "No decks selected — widget will use all decks"
+                else "Selected: $selectedCount of ${decks.size} decks feed the widget",
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
         }
     }
 }
@@ -87,6 +110,8 @@ private fun DeckCard(
     deck: Deck,
     progressStore: ProgressStore,
     quizProgressStore: QuizProgressStore,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
     onPractice: () -> Unit
 ) {
     val isQuizDeck = deck.name.startsWith("Common Words - Fill in the Blank")
@@ -113,13 +138,23 @@ private fun DeckCard(
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column {
-            Text(
-                text = deck.name,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = DeckCardTitle,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = onCheckedChange,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+                Text(
+                    text = deck.name,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = DeckCardTitle,
+                    modifier = Modifier.padding(end = 16.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(2.dp))
 

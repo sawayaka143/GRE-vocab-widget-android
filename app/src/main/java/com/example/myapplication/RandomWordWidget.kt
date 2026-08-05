@@ -9,7 +9,6 @@ import android.view.View
 import android.widget.RemoteViews
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.RandomWordWidgetStore
-import com.example.myapplication.data.SessionStore
 import com.example.myapplication.data.WordRepository
 
 /**
@@ -45,9 +44,9 @@ class RandomWordWidget : AppWidgetProvider() {
                 val store = RandomWordWidgetStore(context)
                 if (store.flipped(widgetId)) {
                     // Already showing the definition -> show a new random word.
-                    val active = activeDeckName(context) ?: return
+                    val decks = selectedDecks(context, WordRepository(context).loadDecks())
                     val current = store.currentWordName(widgetId)
-                    nextRandomWordForDeck(context, active, current)?.let {
+                    nextRandomWordAcrossDecks(context, decks, current)?.let {
                         store.setCurrentWord(widgetId, it.word)
                     }
                 } else {
@@ -67,14 +66,13 @@ internal fun updateRandomWordWidget(
     appWidgetId: Int
 ) {
     val store = RandomWordWidgetStore(context)
-    val active = activeDeckName(context) ?: return
-    val decks = WordRepository(context).loadDecks()
-    val deck = decks.firstOrNull { it.name == active } ?: return
+    val decks = selectedDecks(context, WordRepository(context).loadDecks())
+    if (decks.isEmpty()) return
 
     // Resolve this widget's stored word; seed a random one if missing/stale.
     val stored = store.currentWordName(appWidgetId)
-    val word = deck.words.firstOrNull { it.word == stored }
-        ?: nextRandomWordForDeck(context, active, stored)?.also {
+    val word = decks.flatMap { it.words }.firstOrNull { it.word == stored }
+        ?: nextRandomWordAcrossDecks(context, decks, stored)?.also {
             store.setCurrentWord(appWidgetId, it.word)
         }
         ?: return
@@ -82,7 +80,7 @@ internal fun updateRandomWordWidget(
     val wordState = ProgressStore(context).stateOf(word.word)
 
     val views = RemoteViews(context.packageName, R.layout.widget_random_word)
-    views.setTextViewText(R.id.widget_deck, abbreviateDeck(active))
+    views.setTextViewText(R.id.widget_deck, abbreviateDeck(word.deck))
     views.setTextViewText(R.id.widget_word, word.word)
     views.setTextColor(R.id.widget_status, widgetStatusColor(wordState))
     if (flipped) {
@@ -111,12 +109,6 @@ internal fun updateRandomWordWidget(
     )
 
     appWidgetManager.updateAppWidget(appWidgetId, views)
-}
-
-/** The deck the user is currently learning in the app (fallback: first deck). */
-private fun activeDeckName(context: Context): String? {
-    val decks = WordRepository(context).loadDecks()
-    return SessionStore(context).activeDeck() ?: decks.firstOrNull()?.name
 }
 
 private const val ACTION_TAP = "com.example.myapplication.action.RANDOM_WORD_TAP"
