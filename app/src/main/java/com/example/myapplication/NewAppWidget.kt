@@ -110,6 +110,7 @@ internal fun updateAppWidget(
     val flipped = session.flipped(active)
     val learned = ProgressStore(context).stateOf(word.word) == WordState.MASTERED
 
+    // The original widget is always the full 4x2 card (no responsive compact variant).
     val views = RemoteViews(context.packageName, R.layout.new_app_widget)
     views.setTextViewText(R.id.widget_deck, word.deck)
     views.setTextViewText(R.id.widget_word, word.word)
@@ -138,15 +139,15 @@ internal fun updateAppWidget(
         )
     }
 
-    // Tap deck name -> cycle the active deck
-    views.setOnClickPendingIntent(
-        R.id.widget_deck,
-        buildPendingIntent(context, appWidgetId, ACTION_CYCLE_DECK)
-    )
     // Tap word -> next random word in the active deck
     views.setOnClickPendingIntent(
         R.id.widget_word,
         buildPendingIntent(context, appWidgetId, ACTION_NEXT)
+    )
+    // Tap deck name -> cycle the active deck
+    views.setOnClickPendingIntent(
+        R.id.widget_deck,
+        buildPendingIntent(context, appWidgetId, ACTION_CYCLE_DECK)
     )
     // Tap bottom bar -> flip
     views.setOnClickPendingIntent(
@@ -165,11 +166,11 @@ internal fun updateAppWidget(
 /** Re-renders every placed widget (state is shared, so a change anywhere must refresh all). */
 internal fun updateAllWidgets(context: Context) {
     val manager = AppWidgetManager.getInstance(context)
-    val ids = manager.getAppWidgetIds(
-        ComponentName(context, NewAppWidget::class.java)
-    )
-    for (widgetId in ids) {
-        updateAppWidget(context, manager, widgetId)
+    for (provider in listOf(NewAppWidget::class.java, LockScreenWidget::class.java)) {
+        val ids = manager.getAppWidgetIds(ComponentName(context, provider))
+        for (widgetId in ids) {
+            updateAppWidget(context, manager, widgetId)
+        }
     }
 }
 
@@ -195,6 +196,23 @@ internal fun nextRandomWordForDeck(context: Context, deckName: String, exclude: 
 /** True when the device is locked (keyguard showing). */
 private fun keyguardLocked(context: Context): Boolean =
     context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked() ?: false
+
+/**
+ * Abbreviates a deck name for compact layouts, e.g. "Common Words I" -> "C.W I".
+ * Keeps leading initials (one per word) plus a trailing roman numeral/number.
+ */
+internal fun abbreviateDeck(name: String): String {
+    val trimmed = name.trim()
+    if (trimmed.isEmpty()) return trimmed
+    val parts = trimmed.split(Regex("\\s+"))
+    val initials = parts.takeWhile { part ->
+        !part.matches(Regex("[IVXLC]+"))
+    }.mapNotNull { it.firstOrNull()?.uppercase() }.joinToString(".")
+    val trailing = parts.dropWhile { part ->
+        !part.matches(Regex("[IVXLC]+"))
+    }.take(1).joinToString(" ")
+    return (initials + if (trailing.isNotEmpty()) " $trailing" else "").trim()
+}
 
 private const val ACTION_FLIP = "com.example.myapplication.action.FLIP"
 private const val ACTION_NEXT = "com.example.myapplication.action.NEXT"

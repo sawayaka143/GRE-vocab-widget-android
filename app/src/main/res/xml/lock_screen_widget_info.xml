@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/app_widget_lock_screen_description"
+    android:initialLayout="@layout/widget_lock_screen"
+    android:minWidth="130dp"
+    android:minHeight="51dp"
+    android:minResizeWidth="130dp"
+    android:minResizeHeight="51dp"
+    android:maxResizeWidth="276dp"
+    android:maxResizeHeight="102dp"
+    android:previewImage="@drawable/example_appwidget_preview"
+    android:previewLayout="@layout/widget_lock_screen"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="1800000" />

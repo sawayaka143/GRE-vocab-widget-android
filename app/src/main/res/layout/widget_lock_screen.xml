@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root_lock_screen"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/app_widget_background"
+    android:orientation="vertical"
+    android:padding="6dp">
+
+    <!-- Compact header: abbreviated deck name + small Learned checkbox -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widget_deck"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="@string/widget_deck_default"
+            android:textColor="#6B3FA0"
+            android:textSize="9sp"
+            android:textStyle="bold" />
+
+        <CheckBox
+            android:id="@+id/widget_learned"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="0dp"
+            android:buttonTint="#6B3FA0"
+            android:text="@string/widget_learned"
+            android:textColor="#6B3FA0"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+    <!-- Word fills the middle -->
+    <TextView
+        android:id="@+id/widget_word"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="@string/widget_word_default"
+        android:textColor="#000000"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <!-- Definition appears on tap (definition only, no example) -->
+    <TextView
+        android:id="@+id/widget_definition"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:text="@string/widget_definition_default"
+        android:textColor="#333333"
+        android:textSize="10sp"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="8sp"
+        android:autoSizeMaxTextSize="10sp"
+        android:autoSizeStepGranularity="1sp"
+        android:visibility="gone" />
+
+</LinearLayout>

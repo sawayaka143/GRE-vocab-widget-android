@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.Color
 private val LightColorScheme = lightColorScheme(
     primary = MagooshPurple,
     secondary = MagooshPurpleDark,
-    background = MagooshPurple,
+    background = MagooshPurpleBg,
     surface = Color.White,
     onPrimary = Color.White,
     onBackground = Color.White,
@@ -20,7 +20,7 @@ private val LightColorScheme = lightColorScheme(
 private val DarkColorScheme = darkColorScheme(
     primary = MagooshPurple,
     secondary = MagooshPurpleDark,
-    background = MagooshPurpleDark,
+    background = MagooshPurpleBg,
     surface = Color(0xFF2A2A2A),
     onPrimary = Color.White,
     onBackground = Color.White,

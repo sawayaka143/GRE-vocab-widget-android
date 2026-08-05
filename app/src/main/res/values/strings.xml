@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">GRE Vocab</string>
     <string name="app_widget_description">Random GRE word</string>
+    <string name="app_widget_lock_screen_description">GRE word — tap for definition</string>
+    <string name="app_widget_random_word_description">Random GRE word — tap for definition</string>
     <string name="widget_deck_default">GRE Vocab</string>
     <string name="widget_word_default">aberration</string>
     <string name="widget_definition_default">Definition coming soon</string>

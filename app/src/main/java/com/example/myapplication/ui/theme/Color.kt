@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 // Magoosh-style purple palette
 val MagooshPurple = Color(0xFF6B3FA0)
 val MagooshPurpleDark = Color(0xFF4A2A73)
+val MagooshPurpleBg = Color(0xFF4D2079)
 val MagooshGreen = Color(0xFF3DA05E)
 val MagooshGreenLight = Color(0xFFE6F4EA)
 val MagooshPink = Color(0xFFE57373)
