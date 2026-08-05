@@ -1,12 +1,16 @@
 package com.example.myapplication.data
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import androidx.compose.runtime.mutableIntStateOf
 
 enum class WordState {
     NEW, LEARNING, REVIEWING, MASTERED
 }
+
+/** Broadcast sent after any progress change; triggers a widget refresh. */
+const val ACTION_REFRESH_WIDGETS = "com.example.myapplication.action.REFRESH_WIDGETS"
 
 /**
  * Persists per-word learning state using SharedPreferences.
@@ -19,8 +23,10 @@ enum class WordState {
  */
 class ProgressStore(context: Context) {
 
+    private val appContext: Context = context.applicationContext
+
     private val prefs: SharedPreferences =
-        context.getSharedPreferences("vocab_progress", Context.MODE_PRIVATE)
+        appContext.getSharedPreferences("vocab_progress", Context.MODE_PRIVATE)
 
     /** Bumped on every state change; observe to force UI recomposition. */
     val revision = mutableIntStateOf(0)
@@ -31,11 +37,13 @@ class ProgressStore(context: Context) {
     fun markKnew(word: String) {
         prefs.edit().putString(KEY_STATE + word, knewTransition(stateOf(word)).name).apply()
         revision.intValue++
+        notifyWidgets()
     }
 
     fun markDidntKnow(word: String) {
         prefs.edit().putString(KEY_STATE + word, didntKnowTransition(stateOf(word)).name).apply()
         revision.intValue++
+        notifyWidgets()
     }
 
     /** Returns (mastered, reviewing, learning) counts for a deck. */
@@ -66,6 +74,13 @@ class ProgressStore(context: Context) {
         WordState.LEARNING -> WordState.LEARNING
         WordState.REVIEWING -> WordState.LEARNING
         WordState.MASTERED -> WordState.LEARNING
+    }
+
+    /** Tell placed widgets to re-render (and rotate to a fresh word) after a state change. */
+    private fun notifyWidgets() {
+        appContext.sendBroadcast(
+            Intent(ACTION_REFRESH_WIDGETS).setPackage(appContext.packageName)
+        )
     }
 
     private companion object {

@@ -10,6 +10,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.example.myapplication.data.Deck
 import com.example.myapplication.data.ProgressStore
+import com.example.myapplication.data.SessionStore
+import com.example.myapplication.data.SettingsStore
 import com.example.myapplication.data.WordRepository
 import com.example.myapplication.ui.DeckListScreen
 import com.example.myapplication.ui.FlashcardScreen
@@ -23,6 +25,8 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme {
                 val repository = remember { WordRepository(applicationContext) }
                 val progressStore = remember { ProgressStore(applicationContext) }
+                val sessionStore = remember { SessionStore(applicationContext) }
+                val settingsStore = remember { SettingsStore(applicationContext) }
                 var selectedDeck by remember { mutableStateOf<Deck?>(null) }
 
                 val deck = selectedDeck
@@ -30,12 +34,17 @@ class MainActivity : ComponentActivity() {
                     DeckListScreen(
                         decks = repository.loadDecks(),
                         progressStore = progressStore,
-                        onPracticeDeck = { selectedDeck = it }
+                        onPracticeDeck = {
+                            sessionStore.setActiveDeck(it.name)
+                            selectedDeck = it
+                        }
                     )
                 } else {
                     FlashcardScreen(
                         deck = deck,
                         progressStore = progressStore,
+                        sessionStore = sessionStore,
+                        settingsStore = settingsStore,
                         onBack = { selectedDeck = null }
                     )
                 }

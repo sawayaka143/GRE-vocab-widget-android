@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,8 +23,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.Deck
 import com.example.myapplication.data.ProgressStore
+import com.example.myapplication.data.SessionStore
+import com.example.myapplication.data.SettingsStore
 import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordState
 import com.example.myapplication.data.WordPicker
@@ -51,19 +56,40 @@ import com.example.myapplication.ui.theme.MagooshGreen
 fun FlashcardScreen(
     deck: Deck,
     progressStore: ProgressStore,
+    sessionStore: SessionStore,
+    settingsStore: SettingsStore,
     onBack: () -> Unit
 ) {
-    var currentWord by remember { mutableStateOf<Word?>(null) }
-    var flipped by remember { mutableStateOf(false) }
-    // Observe revision so progress recomposes when the widget (or app) changes it.
+    // Observe revisions so progress/session changes from the widget recompose this screen.
     progressStore.revision.intValue
+    sessionStore.revision.intValue
+    settingsStore.revision.intValue
+
+    var showSettings by remember { mutableStateOf(false) }
+
+    // Initialize from the shared session; re-keyed on session revision so a change
+    // made anywhere (app or widget) is reflected here.
+    var currentWord by remember(sessionStore.revision.intValue) {
+        mutableStateOf(sessionStore.currentWord(deck.name, deck.words))
+    }
+    var flipped by remember(sessionStore.revision.intValue) {
+        mutableStateOf(sessionStore.flipped(deck.name))
+    }
+
     // Only advance when there are words; an empty deck must not divide by zero.
     val total = deck.words.size
     // Weighted-random next word (NEW/LEARNING/REVIEWING, skip MASTERED while possible).
     val picker = remember(progressStore) { WordPicker(progressStore::stateOf) }
     val advance: () -> Unit = {
         if (total > 0) {
-            currentWord = picker.pickNext(deck.words, exclude = currentWord?.word)
+            val next = picker.pickNext(deck.words, exclude = currentWord?.word)
+            if (next != null) sessionStore.setCurrentWord(deck.name, next)
+        }
+    }
+    // Seed the shared session on first ever open of this deck.
+    LaunchedEffect(Unit) {
+        if (!sessionStore.hasWord(deck.name)) {
+            picker.pickNext(deck.words)?.let { sessionStore.setCurrentWord(deck.name, it) }
         }
     }
     // Guard against empty decks.
@@ -84,14 +110,17 @@ fun FlashcardScreen(
         return
     }
     // Start with a random word on first composition.
-    val started = remember { mutableStateOf(false) }
-    if (!started.value) {
-        started.value = true
-        currentWord = picker.pickNext(deck.words)
-    }
     val word = currentWord ?: return
     val state = progressStore.stateOf(word.word)
     val (mastered, reviewing, learning) = progressStore.countsFor(deck)
+
+    if (showSettings) {
+        SettingsScreen(
+            settingsStore = settingsStore,
+            onBack = { showSettings = false }
+        )
+        return
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -100,10 +129,11 @@ fun FlashcardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .safeDrawingPadding()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top bar: back + deck title
+            // Top bar: back + deck title + settings gear
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -126,7 +156,15 @@ fun FlashcardScreen(
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                Spacer(modifier = Modifier.width(48.dp))
+                Text(
+                    text = "⚙",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 20.sp,
+                    modifier = Modifier
+                        .clickable { showSettings = true }
+                        .semantics { contentDescription = "Settings" }
+                        .padding(4.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -136,7 +174,8 @@ fun FlashcardScreen(
                 word = word,
                 state = state,
                 flipped = flipped,
-                onFlip = { flipped = !flipped },
+                showFlipBackBar = settingsStore.showFlipBackBar(),
+                onFlip = { sessionStore.setFlipped(deck.name, !flipped) },
                 onKnew = {
                     progressStore.markKnew(word.word)
                     flipped = false
@@ -171,11 +210,42 @@ fun FlashcardScreen(
     }
 }
 
+/** Full-width tappable bottom bar; highlights only itself when pressed. */
+@Composable
+private fun TapBar(text: String, onTap: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        targetValue = if (isPressed) Color(0xFFE0E0E0) else Color(0xFFF2F2F2),
+        label = "tapBarBg"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bg, RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onTap
+            )
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = Color(0xFF666666),
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
 @Composable
 private fun Flashcard(
     word: Word,
     state: WordState,
     flipped: Boolean,
+    showFlipBackBar: Boolean,
     onFlip: () -> Unit,
     onKnew: () -> Unit,
     onDidntKnow: () -> Unit
@@ -183,8 +253,7 @@ private fun Flashcard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(360.dp)
-            .clickable { onFlip() },
+            .height(360.dp),
         shape = RoundedCornerShape(16.dp),
         color = Color.White,
         shadowElevation = 4.dp
@@ -215,23 +284,14 @@ private fun Flashcard(
                     Spacer(modifier = Modifier.weight(1f))
                 }
 
-                // Divider + full-width bottom bar
+                // Divider + full-width bottom bar (the flip tap target)
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                 ) {
                     HorizontalDivider(color = Color(0xFFE0E0E0))
-                    Text(
-                        text = "Tap to see meaning →",
-                        color = Color(0xFF666666),
-                        fontSize = 14.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFFF2F2F2), RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
-                            .padding(vertical = 12.dp),
-                        textAlign = TextAlign.Center
-                    )
+                    TapBar(text = "Tap to see meaning →", onTap = onFlip)
                 }
             } else {
                 // Back: content (badge + word + definition) padded; buttons edge-to-edge
@@ -266,12 +326,16 @@ private fun Flashcard(
                     }
                 }
 
-                // Action buttons edge-to-edge at the bottom of the card (flipped face)
+                // Bottom of the back face: optional "Tap to go back" bar, then action buttons
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                 ) {
+                    if (showFlipBackBar) {
+                        HorizontalDivider(color = Color(0xFFE0E0E0))
+                        TapBar(text = "Tap to go back", onTap = onFlip)
+                    }
                     // Top button: green, dark green text
                     val knewInteractionSource = remember { MutableInteractionSource() }
                     val knewIsPressed by knewInteractionSource.collectIsPressedAsState()
@@ -336,7 +400,7 @@ private fun StatusBadge(state: WordState, modifier: Modifier = Modifier) {
         WordState.MASTERED -> Triple("MASTERED", Color(0xFFBAF5CA), Color(0xFF30B961))
         WordState.REVIEWING -> Triple("REVIEWING", Color(0xFFFFE3C2), Color(0xFFEBA15A))
         WordState.LEARNING -> Triple("LEARNING", Color(0xFFF9D1D2), Color(0xFFC07571))
-        WordState.NEW -> Triple("NEW", Color(0xFFF2F2F2), Color(0xFF666666))
+        WordState.NEW -> Triple("NEW WORD", Color(0xFFF2F2F2), Color(0xFF666666))
     }
     Surface(
         modifier = modifier,
@@ -372,5 +436,69 @@ private fun ProgressStat(label: String, fraction: Float, color: Color) {
             color = color,
             trackColor = Color.White.copy(alpha = 0.15f)
         )
+    }
+}
+
+@Composable
+private fun SettingsScreen(
+    settingsStore: SettingsStore,
+    onBack: () -> Unit
+) {
+    val showFlipBackBar = settingsStore.showFlipBackBar()
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .padding(16.dp)
+        ) {
+            // Top bar: back + title
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "←",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 20.sp,
+                    modifier = Modifier
+                        .clickable { onBack() }
+                        .semantics { contentDescription = "Back to flashcard" }
+                        .padding(4.dp)
+                )
+                Text(
+                    text = "Settings",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Flip-back bar toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Show \"Tap to go back\" on card back",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = showFlipBackBar,
+                    onCheckedChange = { settingsStore.setShowFlipBackBar(it) }
+                )
+            }
+        }
     }
 }

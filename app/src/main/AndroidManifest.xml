@@ -35,6 +35,16 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/new_app_widget_info" />
         </receiver>
+
+        <receiver
+            android:name=".WidgetRefreshReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.SCREEN_ON" />
+                <action android:name="com.example.myapplication.action.REFRESH_WIDGETS" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
