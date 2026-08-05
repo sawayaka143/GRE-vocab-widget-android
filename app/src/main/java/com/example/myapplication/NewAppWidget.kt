@@ -10,6 +10,7 @@ import android.content.Intent
 import android.view.View
 import android.widget.RemoteViews
 import com.example.myapplication.data.ProgressStore
+import com.example.myapplication.data.RandomWordWidgetStore
 import com.example.myapplication.data.SessionStore
 import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordPicker
@@ -108,12 +109,14 @@ internal fun updateAppWidget(
         }
         ?: return
     val flipped = session.flipped(active)
-    val learned = ProgressStore(context).stateOf(word.word) == WordState.MASTERED
+    val wordState = ProgressStore(context).stateOf(word.word)
+    val learned = wordState == WordState.MASTERED
 
     // The original widget is always the full 4x2 card (no responsive compact variant).
     val views = RemoteViews(context.packageName, R.layout.new_app_widget)
     views.setTextViewText(R.id.widget_deck, word.deck)
     views.setTextViewText(R.id.widget_word, word.word)
+    views.setTextColor(R.id.widget_status, widgetStatusColor(wordState))
     views.setCompoundButtonChecked(R.id.widget_learned, learned)
 
     if (flipped) {
@@ -163,15 +166,46 @@ internal fun updateAppWidget(
     appWidgetManager.updateAppWidget(appWidgetId, views)
 }
 
-/** Re-renders every placed widget (state is shared, so a change anywhere must refresh all). */
+/** Re-renders every placed widget after shared state changes. */
 internal fun updateAllWidgets(context: Context) {
     val manager = AppWidgetManager.getInstance(context)
     for (provider in listOf(NewAppWidget::class.java, LockScreenWidget::class.java)) {
         val ids = manager.getAppWidgetIds(ComponentName(context, provider))
         for (widgetId in ids) {
-            updateAppWidget(context, manager, widgetId)
+            if (provider == NewAppWidget::class.java) {
+                updateAppWidget(context, manager, widgetId)
+            } else {
+                updateLockScreenWidget(context, manager, widgetId)
+            }
         }
     }
+    val randomIds = manager.getAppWidgetIds(ComponentName(context, RandomWordWidget::class.java))
+    for (widgetId in randomIds) {
+        updateRandomWordWidget(context, manager, widgetId)
+    }
+}
+
+/** Rotates each widget's current word after the device wakes or finishes booting. */
+internal fun rotateWidgetsForDeviceEvent(context: Context) {
+    val session = SessionStore(context)
+    val decks = WordRepository(context).loadDecks()
+    val active = session.activeDeck() ?: decks.firstOrNull()?.name
+    if (active != null) {
+        nextRandomWordForDeck(context, active, session.currentWordName(active))?.let {
+            session.setCurrentWord(active, it)
+        }
+    }
+
+    val manager = AppWidgetManager.getInstance(context)
+    val store = RandomWordWidgetStore(context)
+    val randomIds = manager.getAppWidgetIds(ComponentName(context, RandomWordWidget::class.java))
+    for (widgetId in randomIds) {
+        val current = store.currentWordName(widgetId)
+        nextRandomWordForDeck(context, active ?: return, current)?.let {
+            store.setCurrentWord(widgetId, it.word)
+        }
+    }
+    updateAllWidgets(context)
 }
 
 private fun buildPendingIntent(context: Context, widgetId: Int, action: String): PendingIntent {
@@ -191,6 +225,13 @@ private fun buildPendingIntent(context: Context, widgetId: Int, action: String):
 internal fun nextRandomWordForDeck(context: Context, deckName: String, exclude: String?): Word? {
     val deck = WordRepository(context).loadDecks().firstOrNull { it.name == deckName } ?: return null
     return WordPicker(ProgressStore(context)::stateOf).pickNext(deck.words, exclude)
+}
+
+internal fun widgetStatusColor(state: WordState): Int = when (state) {
+    WordState.MASTERED -> android.graphics.Color.rgb(48, 185, 97)
+    WordState.REVIEWING -> android.graphics.Color.rgb(235, 161, 90)
+    WordState.LEARNING -> android.graphics.Color.rgb(192, 117, 113)
+    WordState.NEW -> android.graphics.Color.rgb(102, 102, 102)
 }
 
 /** True when the device is locked (keyguard showing). */

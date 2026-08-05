@@ -72,11 +72,13 @@ internal fun updateLockScreenWidget(
     val flipped = session.flipped(active)
 
     val views = RemoteViews(context.packageName, R.layout.widget_lock_screen)
+    val wordState = ProgressStore(context).stateOf(word.word)
     views.setTextViewText(R.id.widget_deck, abbreviateDeck(word.deck))
     views.setTextViewText(R.id.widget_word, word.word)
+    views.setTextColor(R.id.widget_status, widgetStatusColor(wordState))
     views.setCompoundButtonChecked(
         R.id.widget_learned,
-        ProgressStore(context).stateOf(word.word) == WordState.MASTERED
+        wordState == WordState.MASTERED
     )
     if (flipped) {
         views.setTextViewText(

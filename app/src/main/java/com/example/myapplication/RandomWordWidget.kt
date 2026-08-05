@@ -7,9 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.widget.RemoteViews
+import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.RandomWordWidgetStore
 import com.example.myapplication.data.SessionStore
-import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordRepository
 
 /**
@@ -47,7 +47,7 @@ class RandomWordWidget : AppWidgetProvider() {
                     // Already showing the definition -> show a new random word.
                     val active = activeDeckName(context) ?: return
                     val current = store.currentWordName(widgetId)
-                    randomWordFromDeck(context, active, current)?.let {
+                    nextRandomWordForDeck(context, active, current)?.let {
                         store.setCurrentWord(widgetId, it.word)
                     }
                 } else {
@@ -74,15 +74,17 @@ internal fun updateRandomWordWidget(
     // Resolve this widget's stored word; seed a random one if missing/stale.
     val stored = store.currentWordName(appWidgetId)
     val word = deck.words.firstOrNull { it.word == stored }
-        ?: randomWordFromDeck(context, active, stored)?.also {
+        ?: nextRandomWordForDeck(context, active, stored)?.also {
             store.setCurrentWord(appWidgetId, it.word)
         }
         ?: return
     val flipped = store.flipped(appWidgetId)
+    val wordState = ProgressStore(context).stateOf(word.word)
 
     val views = RemoteViews(context.packageName, R.layout.widget_random_word)
     views.setTextViewText(R.id.widget_deck, abbreviateDeck(active))
     views.setTextViewText(R.id.widget_word, word.word)
+    views.setTextColor(R.id.widget_status, widgetStatusColor(wordState))
     if (flipped) {
         views.setTextViewText(
             R.id.widget_definition,
@@ -115,13 +117,6 @@ internal fun updateRandomWordWidget(
 private fun activeDeckName(context: Context): String? {
     val decks = WordRepository(context).loadDecks()
     return SessionStore(context).activeDeck() ?: decks.firstOrNull()?.name
-}
-
-/** Picks a uniformly random word from the deck, preferring one different from [exclude]. */
-private fun randomWordFromDeck(context: Context, deckName: String, exclude: String?): Word? {
-    val deck = WordRepository(context).loadDecks().firstOrNull { it.name == deckName } ?: return null
-    val candidates = if (exclude == null) deck.words else deck.words.filter { it.word != exclude }
-    return if (candidates.isEmpty()) deck.words.randomOrNull() else candidates.random()
 }
 
 private const val ACTION_TAP = "com.example.myapplication.action.RANDOM_WORD_TAP"

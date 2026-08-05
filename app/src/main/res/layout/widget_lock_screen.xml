@@ -26,6 +26,15 @@
             android:textSize="9sp"
             android:textStyle="bold" />
 
+        <TextView
+            android:id="@+id/widget_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="2dp"
+            android:text="●"
+            android:textColor="#666666"
+            android:textSize="9sp" />
+
         <CheckBox
             android:id="@+id/widget_learned"
             android:layout_width="wrap_content"
