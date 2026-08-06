@@ -2,68 +2,87 @@ package com.example.myapplication.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.Deck
 import com.example.myapplication.data.ProgressStore
+import com.example.myapplication.data.SessionStore
 import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordState
 import com.example.myapplication.data.WordPicker
 import com.example.myapplication.ui.theme.MagooshAmber
-import com.example.myapplication.ui.theme.MagooshBlue
 import com.example.myapplication.ui.theme.MagooshGreen
+import com.example.myapplication.ui.theme.MagooshPink
 
 @Composable
 fun FlashcardScreen(
     deck: Deck,
     progressStore: ProgressStore,
+    sessionStore: SessionStore,
     onBack: () -> Unit
 ) {
-    var currentWord by remember { mutableStateOf<Word?>(null) }
-    var flipped by remember { mutableStateOf(false) }
-    // Observe revision so progress recomposes when the widget (or app) changes it.
+    // Observe revisions so progress/session changes from the widget recompose this screen.
     progressStore.revision.intValue
+    sessionStore.revision.intValue
+
+    // Initialize from the shared session; re-keyed on session revision so a change
+    // made anywhere (app or widget) is reflected here.
+    var currentWord by remember(sessionStore.revision.intValue) {
+        mutableStateOf(sessionStore.currentWord(deck.name, deck.words))
+    }
+    var flipped by remember(sessionStore.revision.intValue) {
+        mutableStateOf(sessionStore.flipped(deck.name))
+    }
+
     // Only advance when there are words; an empty deck must not divide by zero.
     val total = deck.words.size
     // Weighted-random next word (NEW/LEARNING/REVIEWING, skip MASTERED while possible).
-    val picker = remember(progressStore) { WordPicker(progressStore) }
+    val picker = remember(progressStore) { WordPicker(progressStore::stateOf) }
     val advance: () -> Unit = {
         if (total > 0) {
-            currentWord = picker.pickNext(deck.words, exclude = currentWord?.word)
+            val next = picker.pickNext(deck.words, exclude = currentWord?.word)
+            if (next != null) sessionStore.setCurrentWord(deck.name, next)
+        }
+    }
+    // Seed the shared session on first ever open of this deck.
+    LaunchedEffect(Unit) {
+        if (!sessionStore.hasWord(deck.name)) {
+            picker.pickNext(deck.words)?.let { sessionStore.setCurrentWord(deck.name, it) }
         }
     }
     // Guard against empty decks.
@@ -84,11 +103,6 @@ fun FlashcardScreen(
         return
     }
     // Start with a random word on first composition.
-    val started = remember { mutableStateOf(false) }
-    if (!started.value) {
-        started.value = true
-        currentWord = picker.pickNext(deck.words)
-    }
     val word = currentWord ?: return
     val state = progressStore.stateOf(word.word)
     val (mastered, reviewing, learning) = progressStore.countsFor(deck)
@@ -100,6 +114,7 @@ fun FlashcardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .safeDrawingPadding()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -125,8 +140,6 @@ fun FlashcardScreen(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold
                 )
-                Spacer(modifier = Modifier.weight(1f))
-                Spacer(modifier = Modifier.width(48.dp))
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -136,7 +149,7 @@ fun FlashcardScreen(
                 word = word,
                 state = state,
                 flipped = flipped,
-                onFlip = { flipped = !flipped },
+                onFlip = { sessionStore.setFlipped(deck.name, !flipped) },
                 onKnew = {
                     progressStore.markKnew(word.word)
                     flipped = false
@@ -165,9 +178,39 @@ fun FlashcardScreen(
             ProgressStat(
                 label = "You are learning $learning out of $total words",
                 fraction = if (total == 0) 0f else learning.toFloat() / total,
-                color = MagooshBlue
+                color = MagooshPink
             )
         }
+    }
+}
+
+/** Full-width tappable bottom bar; highlights only itself when pressed. */
+@Composable
+private fun TapBar(text: String, onTap: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        targetValue = if (isPressed) Color(0xFFE0E0E0) else Color(0xFFF2F2F2),
+        label = "tapBarBg"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bg, RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onTap
+            )
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = Color(0xFF666666),
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
@@ -180,163 +223,223 @@ private fun Flashcard(
     onKnew: () -> Unit,
     onDidntKnow: () -> Unit
 ) {
+    val cardShape = RoundedCornerShape(16.dp)
+
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(360.dp)
-            .clickable { onFlip() },
-        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+        shape = cardShape,
         color = Color.White,
         shadowElevation = 4.dp
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (!flipped) {
-                // Front: badge + centered word + full-width bottom bar
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    StatusBadge(state = state, modifier = Modifier.align(Alignment.End))
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    Text(
-                        text = word.word,
-                        fontFamily = FontFamily.Serif,
-                        fontSize = 34.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black,
-                        textAlign = TextAlign.Center
+        SubcomposeLayout(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(cardShape)
+        ) { constraints ->
+            val faceConstraints = constraints.copy(
+                minHeight = 0,
+                maxHeight = Constraints.Infinity
+            )
+            val front = subcompose("front") {
+                FrontFace(word = word, state = state, onFlip = onFlip)
+            }.single().measure(faceConstraints)
+            val back = subcompose("back") {
+                BackFace(
+                    word = word,
+                    state = state,
+                    onKnew = onKnew,
+                    onDidntKnow = onDidntKnow
+                )
+            }.single().measure(faceConstraints)
+            val cardWidth = maxOf(front.width, back.width)
+                .coerceIn(constraints.minWidth, constraints.maxWidth)
+            val cardHeight = maxOf(front.height, back.height)
+                .coerceIn(constraints.minHeight, constraints.maxHeight)
+            val placementConstraints = faceConstraints.copy(
+                minWidth = cardWidth,
+                maxWidth = cardWidth,
+                minHeight = cardHeight,
+                maxHeight = cardHeight
+            )
+            val activeFace = subcompose(if (flipped) "back-placement" else "front-placement") {
+                if (flipped) {
+                    BackFace(
+                        word = word,
+                        state = state,
+                        onKnew = onKnew,
+                        onDidntKnow = onDidntKnow,
+                        fillHeight = true
                     )
-
-                    Spacer(modifier = Modifier.weight(1f))
+                } else {
+                    FrontFace(
+                        word = word,
+                        state = state,
+                        onFlip = onFlip,
+                        fillHeight = true
+                    )
                 }
+            }.single().measure(placementConstraints)
 
-                // Divider + full-width bottom bar
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                ) {
-                    HorizontalDivider(color = Color(0xFFE0E0E0))
-                    Text(
-                        text = "Tap to see meaning →",
-                        color = Color(0xFF666666),
-                        fontSize = 14.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFFF2F2F2), RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
-                            .padding(vertical = 12.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            } else {
-                // Back: content (badge + word + definition) padded; buttons edge-to-edge
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp)
-                ) {
-                    StatusBadge(state = state, modifier = Modifier.align(Alignment.End))
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = word.word,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = word.definition ?: "(definition coming soon)",
-                        fontSize = 18.sp,
-                        color = Color(0xFF333333)
-                    )
-                    word.example?.let { example ->
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "\"$example\"",
-                            fontSize = 15.sp,
-                            color = Color(0xFF555555)
-                        )
-                    }
-                }
-
-                // Action buttons edge-to-edge at the bottom of the card (flipped face)
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                ) {
-                    // Top button: green, dark green text
-                    val knewInteractionSource = remember { MutableInteractionSource() }
-                    val knewIsPressed by knewInteractionSource.collectIsPressedAsState()
-                    val knewBg by animateColorAsState(
-                        targetValue = if (knewIsPressed) Color(0xFF96C4A3) else Color(0xFFBCF5CB),
-                        label = "knewBg"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .background(knewBg)
-                            .clickable(
-                                interactionSource = knewInteractionSource,
-                                indication = null,
-                                onClick = onKnew
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "✓ I knew this word",
-                            color = Color(0xFF30B961),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    // Bottom button: pink, dark red text
-                    val didntKnowInteractionSource = remember { MutableInteractionSource() }
-                    val didntKnowIsPressed by didntKnowInteractionSource.collectIsPressedAsState()
-                    val didntKnowBg by animateColorAsState(
-                        targetValue = if (didntKnowIsPressed) Color(0xFFCAA6A8) else Color(0xFFFDCFD1),
-                        label = "didntKnowBg"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .background(didntKnowBg)
-                            .clickable(
-                                interactionSource = didntKnowInteractionSource,
-                                indication = null,
-                                onClick = onDidntKnow
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "✗ I didn't know this word",
-                            color = Color(0xFFC07571),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+            layout(cardWidth, cardHeight) {
+                activeFace.placeRelative(0, 0)
             }
         }
     }
 }
 
 @Composable
-private fun StatusBadge(state: WordState, modifier: Modifier = Modifier) {
+private fun FrontFace(
+    word: Word,
+    state: WordState,
+    onFlip: () -> Unit,
+    fillHeight: Boolean = false
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier)
+            .padding(top = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        StatusBadge(state = state, modifier = Modifier.align(Alignment.End))
+        if (fillHeight) {
+            Spacer(modifier = Modifier.weight(1f))
+        } else {
+            Spacer(modifier = Modifier.height(40.dp))
+        }
+        Text(
+            text = word.word,
+            modifier = Modifier.fillMaxWidth(),
+            fontFamily = FontFamily.Serif,
+            fontSize = 34.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black,
+            textAlign = TextAlign.Center
+        )
+        if (fillHeight) {
+            Spacer(modifier = Modifier.weight(1f))
+        } else {
+            Spacer(modifier = Modifier.height(40.dp))
+        }
+        HorizontalDivider(color = Color(0xFFE0E0E0))
+        TapBar(text = "Tap to see meaning →", onTap = onFlip)
+    }
+}
+
+@Composable
+private fun BackFace(
+    word: Word,
+    state: WordState,
+    onKnew: () -> Unit,
+    onDidntKnow: () -> Unit,
+    fillHeight: Boolean = false
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            StatusBadge(state = state, modifier = Modifier.align(Alignment.End))
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = word.word,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = word.definition ?: "(definition coming soon)",
+                fontSize = 18.sp,
+                color = Color(0xFF333333)
+            )
+            word.example?.let { example ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "\"$example\"",
+                    fontSize = 15.sp,
+                    color = Color(0xFF555555)
+                )
+            }
+        }
+        if (fillHeight) {
+            Spacer(modifier = Modifier.weight(1f))
+        }
+        KnewButton(onClick = onKnew)
+        DidntKnowButton(onClick = onDidntKnow)
+    }
+}
+
+@Composable
+private fun KnewButton(onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        targetValue = if (isPressed) Color(0xFF96C4A3) else Color(0xFFBCF5CB),
+        label = "knewBg"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .background(bg)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "✓ I knew this word",
+            color = Color(0xFF30B961),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun DidntKnowButton(onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        targetValue = if (isPressed) Color(0xFFCAA6A8) else Color(0xFFFDCFD1),
+        label = "didntKnowBg"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .background(bg)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "✗ I didn't know this word",
+            color = Color(0xFFC07571),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+internal fun StatusBadge(state: WordState, modifier: Modifier = Modifier) {
     val (label, bg, fg) = when (state) {
         WordState.MASTERED -> Triple("MASTERED", Color(0xFFBAF5CA), Color(0xFF30B961))
         WordState.REVIEWING -> Triple("REVIEWING", Color(0xFFFFE3C2), Color(0xFFEBA15A))
         WordState.LEARNING -> Triple("LEARNING", Color(0xFFF9D1D2), Color(0xFFC07571))
-        WordState.NEW -> Triple("NEW", Color(0xFFF2F2F2), Color(0xFF666666))
+        WordState.NEW -> Triple("NEW WORD", Color(0xFFF2F2F2), Color(0xFF666666))
     }
     Surface(
         modifier = modifier,
@@ -353,24 +456,32 @@ private fun StatusBadge(state: WordState, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ProgressStat(label: String, fraction: Float, color: Color) {
-    Column(modifier = Modifier
-        .fillMaxWidth()
-        .padding(vertical = 6.dp)) {
+internal fun ProgressStat(label: String, fraction: Float, color: Color) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
         Text(
             text = label,
             color = MaterialTheme.colorScheme.onBackground,
-            fontSize = 14.sp
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 6.dp)
         )
-        Spacer(modifier = Modifier.height(4.dp))
-        LinearProgressIndicator(
-            progress = { fraction },
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(8.dp)
-                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp)),
-            color = color,
-            trackColor = Color.White.copy(alpha = 0.15f)
-        )
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color(0xFFE6E6E6))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(color)
+            )
+        }
     }
 }

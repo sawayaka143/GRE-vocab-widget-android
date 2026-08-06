@@ -17,3 +17,6 @@ build/
 
 # --- OS / editor ---
 .DS_Store
+
+# --- Data build tool ---
+scripts/.cache/

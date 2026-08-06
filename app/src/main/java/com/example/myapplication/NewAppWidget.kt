@@ -1,21 +1,32 @@
 package com.example.myapplication
 
+import android.app.KeyguardManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.widget.RemoteViews
+import com.example.myapplication.data.Deck
+import com.example.myapplication.data.DeckSelectionStore
 import com.example.myapplication.data.ProgressStore
+import com.example.myapplication.data.RandomWordWidgetStore
+import com.example.myapplication.data.SessionStore
 import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordPicker
 import com.example.myapplication.data.WordRepository
 import com.example.myapplication.data.WordState
 
 /**
- * GRE vocab home-screen widget.
- * - Tap the word to cycle to a different random word.
+ * GRE vocab home-screen widget, fully synced with the app via [SessionStore].
+ *
+ * Hybrid word source: the widget shows a random word from the SELECTED decks
+ * (like the small widget), but writes it back to the shared session and marks
+ * the picked deck as active, so the app mirrors it when opened — and vice versa.
+ *
+ * - Tap the word area to advance to a new random word from the selected decks.
  * - Tap the bottom bar to flip between the word and its meaning.
  * - Tap "Learned" to mark the word as mastered (synced with the app).
  */
@@ -26,6 +37,11 @@ class NewAppWidget : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
+        // Rotate to a new word on every system-triggered widget update. onUpdate()
+        // is called by the system on the periodic APPWIDGET_UPDATE schedule and
+        // on widget placement. Rotates unconditionally so the word always changes.
+        rotateWidgetsForDeviceEvent(context)
+
         for (appWidgetId in appWidgetIds) {
             updateAppWidget(context, appWidgetManager, appWidgetId)
         }
@@ -39,45 +55,47 @@ class NewAppWidget : AppWidgetProvider() {
         )
         if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return
 
-        val manager = AppWidgetManager.getInstance(context)
+        val session = SessionStore(context)
+        val decks = WordRepository(context).loadDecks()
+        val recentStore = RandomWordWidgetStore(context)
+        val active = session.activeDeck()
+            ?: decks.firstOrNull()?.name
+            ?: return
+
         when (intent.action) {
             ACTION_FLIP -> {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val flipped = !prefs.getBoolean(KEY_FLIPPED + widgetId, false)
-                prefs.edit().putBoolean(KEY_FLIPPED + widgetId, flipped).apply()
-                updateAppWidget(context, manager, widgetId)
+                session.setFlipped(active, !session.flipped(active))
             }
 
             ACTION_NEXT -> {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val current = prefs.getString(KEY_WORD + widgetId, null)
-                val next = nextRandomWord(context, current) ?: return
-                prefs.edit()
-                    .putString(KEY_WORD + widgetId, next.word)
-                    .putBoolean(KEY_FLIPPED + widgetId, false)
-                    .apply()
-                updateAppWidget(context, manager, widgetId)
+                val current = session.currentWordName(active)
+                nextRandomWordAcrossDecks(
+                    context,
+                    selectedDecks(context, decks),
+                    current,
+                    recentWords = recentStore.recentWords(widgetId),
+                    onPicked = { recentStore.pushRecentWord(widgetId, it.word) }
+                )?.let {
+                    session.setCurrentWord(it.deck, it)
+                    session.setActiveDeck(it.deck)
+                }
             }
 
             ACTION_TOGGLE_LEARNED -> {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val word = prefs.getString(KEY_WORD + widgetId, null) ?: return
+                // Don't mutate learning progress while the device is locked —
+                // accidental pocket taps shouldn't mark words as mastered.
+                if (keyguardLocked(context)) return
+                val word = session.currentWordName(active) ?: return
                 val progress = ProgressStore(context)
-                val isLearned = progress.stateOf(word) == WordState.MASTERED
-                if (isLearned) progress.markDidntKnow(word) else progress.markKnew(word)
-                updateAppWidget(context, manager, widgetId)
+                if (progress.stateOf(word) == WordState.MASTERED) {
+                    progress.markDidntKnow(word)
+                } else {
+                    progress.markKnew(word)
+                }
             }
         }
-    }
-
-    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val editor = prefs.edit()
-        for (appWidgetId in appWidgetIds) {
-            editor.remove(KEY_FLIPPED + appWidgetId)
-            editor.remove(KEY_WORD + appWidgetId)
-        }
-        editor.apply()
+        // Shared state changed: re-render every placed widget.
+        updateAllWidgets(context)
     }
 }
 
@@ -86,21 +104,36 @@ internal fun updateAppWidget(
     appWidgetManager: AppWidgetManager,
     appWidgetId: Int
 ) {
-    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val session = SessionStore(context)
+    val decks = WordRepository(context).loadDecks()
+    val selected = selectedDecks(context, decks)
+    if (selected.isEmpty()) return
 
-    // Pick a word once per widget and remember it, so flips don't re-roll.
-    val word = currentWordFor(context, prefs, appWidgetId)
-    if (word == null) {
-        appWidgetManager.updateAppWidget(appWidgetId, RemoteViews(context.packageName, R.layout.new_app_widget))
-        return
-    }
+    // The ACTIVE deck is the one the widget just picked/synced; the widget's
+    // displayed word is always its session word. Resolve it fresh so tap-exclusion
+    // (and flip/learned) target the word actually on screen.
+    val activeDeck = session.activeDeck() ?: selected.first().name
+    val activeWord = session.currentWordName(activeDeck)
+        ?.let { name -> selected.flatMap { it.words }.firstOrNull { it.word == name } }
 
-    val flipped = prefs.getBoolean(KEY_FLIPPED + appWidgetId, false)
-    val learned = ProgressStore(context).stateOf(word.word) == WordState.MASTERED
+    // Resolve the word to show: the shared session word for ANY selected deck
+    // (hybrid — the random pool is the selected decks), else seed a fresh random
+    // word from the selected decks.
+    val word = activeWord
+        ?: nextRandomWordAcrossDecks(context, selected, null)?.also {
+            session.setCurrentWord(it.deck, it)
+            session.setActiveDeck(it.deck)
+        }
+        ?: return
+    val flipped = session.flipped(word.deck)
+    val wordState = ProgressStore(context).stateOf(word.word)
+    val learned = wordState == WordState.MASTERED
 
+    // The original widget is always the full 4x2 card (no responsive compact variant).
     val views = RemoteViews(context.packageName, R.layout.new_app_widget)
     views.setTextViewText(R.id.widget_deck, word.deck)
     views.setTextViewText(R.id.widget_word, word.word)
+    views.setTextColor(R.id.widget_status, widgetStatusColor(wordState))
     views.setCompoundButtonChecked(R.id.widget_learned, learned)
 
     if (flipped) {
@@ -126,64 +159,175 @@ internal fun updateAppWidget(
         )
     }
 
-    // Tap word -> next random word
-    views.setOnClickPendingIntent(
-        R.id.widget_word,
-        buildPendingIntent(context, appWidgetId, ACTION_NEXT)
-    )
+    // Tap anywhere on the widget (except the bar/checkbox) -> next random word.
+    // Explicitly set on the word area and the word itself to avoid "dead spots"
+    // on launchers that don't bubble clicks from children to the root.
+    val nextIntent = buildPendingIntent(context, appWidgetId, ACTION_NEXT, 0)
+    views.setOnClickPendingIntent(R.id.widget_root, nextIntent)
+    views.setOnClickPendingIntent(R.id.widget_middle_section, nextIntent)
+    views.setOnClickPendingIntent(R.id.widget_word, nextIntent)
+
     // Tap bottom bar -> flip
     views.setOnClickPendingIntent(
         R.id.widget_reveal_bar,
-        buildPendingIntent(context, appWidgetId, ACTION_FLIP)
+        buildPendingIntent(context, appWidgetId, ACTION_FLIP, 1)
     )
     // Tap checkbox -> toggle learned
     views.setOnClickPendingIntent(
         R.id.widget_learned,
-        buildPendingIntent(context, appWidgetId, ACTION_TOGGLE_LEARNED)
+        buildPendingIntent(context, appWidgetId, ACTION_TOGGLE_LEARNED, 2)
     )
 
     appWidgetManager.updateAppWidget(appWidgetId, views)
 }
 
-private fun buildPendingIntent(context: Context, widgetId: Int, action: String): PendingIntent {
+/** Re-renders every placed widget after shared state changes. */
+internal fun updateAllWidgets(context: Context) {
+    val manager = AppWidgetManager.getInstance(context)
+    val newIds = manager.getAppWidgetIds(ComponentName(context, NewAppWidget::class.java))
+    for (widgetId in newIds) {
+        updateAppWidget(context, manager, widgetId)
+    }
+    val randomIds = manager.getAppWidgetIds(ComponentName(context, RandomWordWidget::class.java))
+    for (widgetId in randomIds) {
+        updateRandomWordWidget(context, manager, widgetId)
+    }
+}
+
+/** Rotates each widget's current word after the device wakes or finishes booting. */
+internal fun rotateWidgetsForDeviceEvent(context: Context) {
+    val session = SessionStore(context)
+    val decks = WordRepository(context).loadDecks()
+    val selected = selectedDecks(context, decks)
+    val manager = AppWidgetManager.getInstance(context)
+    val store = RandomWordWidgetStore(context)
+    if (selected.isNotEmpty()) {
+        // Exclude the ACTIVE deck's session word — that's what the main widget shows.
+        val activeName = session.activeDeck() ?: selected.first().name
+        val exclude = session.currentWordName(activeName)
+        val mainIds = manager.getAppWidgetIds(ComponentName(context, NewAppWidget::class.java))
+        mainIds.forEach { widgetId ->
+            nextRandomWordAcrossDecks(
+                context,
+                selected,
+                exclude,
+                recentWords = store.recentWords(widgetId),
+                onPicked = { store.pushRecentWord(widgetId, it.word) }
+            )?.let {
+                session.setCurrentWord(it.deck, it)
+                session.setActiveDeck(it.deck)
+            }
+        }
+    }
+
+    val randomIds = manager.getAppWidgetIds(ComponentName(context, RandomWordWidget::class.java))
+    for (widgetId in randomIds) {
+        val current = store.currentWordName(widgetId)
+        nextRandomWordAcrossDecks(
+            context,
+            selected,
+            current,
+            recentWords = store.recentWords(widgetId),
+            onPicked = { store.pushRecentWord(widgetId, it.word) }
+        )?.let {
+            store.setCurrentWord(widgetId, it.word)
+        }
+    }
+    updateAllWidgets(context)
+}
+
+private fun buildPendingIntent(
+    context: Context,
+    widgetId: Int,
+    action: String,
+    requestCodeOffset: Int = 0
+): PendingIntent {
     val intent = Intent(context, NewAppWidget::class.java).apply {
         this.action = action
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
     }
+    // Use unique request codes per action to prevent intent collision in the system cache.
+    val requestCode = widgetId * 10 + requestCodeOffset
     return PendingIntent.getBroadcast(
         context,
-        widgetId,
+        requestCode,
         intent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 }
 
-/** Returns the word this widget is showing, picking and remembering a random one on first use. */
-private fun currentWordFor(
+/** The decks selected (checked) to feed the widget; falls back to all decks if none selected. */
+internal fun selectedDecks(context: Context, allDecks: List<Deck>): List<Deck> {
+    val selected = DeckSelectionStore(context).selectedDeckNames()
+    return if (selected.isEmpty()) allDecks else allDecks.filter { it.name in selected }
+}
+
+/**
+ * Picks a random word from the union of [decks], GUARANTEED different from
+ * [exclude] when any other word exists. WordPicker's recency penalty is soft
+ * (a recent word can still win), so we hard-exclude here by retrying.
+ *
+ * [recentWords] seeds the picker's recency memory (so recently shown words back
+ * off across taps), and [onPicked] is invoked with the chosen word so the caller
+ * can record it in persisted history.
+ */
+internal fun nextRandomWordAcrossDecks(
     context: Context,
-    prefs: android.content.SharedPreferences,
-    appWidgetId: Int
+    decks: List<Deck>,
+    exclude: String?,
+    recentWords: List<String> = emptyList(),
+    onPicked: ((Word) -> Unit)? = null
 ): Word? {
-    val saved = prefs.getString(KEY_WORD + appWidgetId, null)
-    if (saved != null) {
-        return WordRepository(context).loadDecks().flatMap { it.words }
-            .firstOrNull { it.word == saved }
+    if (decks.isEmpty()) return null
+    val picker = WordPicker(ProgressStore(context)::stateOf, initialRecent = recentWords)
+    val candidates = decks.flatMap { it.words }
+    if (candidates.isEmpty()) return null
+    if (candidates.size == 1) return candidates.first()
+
+    // Try each deck; if the pick equals the excluded word, keep trying.
+    val shuffled = decks.shuffled()
+    for (attempt in 0 until shuffled.size) {
+        val deck = shuffled[attempt % shuffled.size]
+        val picked = picker.pickNext(deck.words, exclude) ?: continue
+        if (picked.word != exclude) {
+            onPicked?.invoke(picked)
+            return picked
+        }
     }
-
-    val word = nextRandomWord(context, null) ?: return null
-    prefs.edit().putString(KEY_WORD + appWidgetId, word.word).apply()
-    return word
+    // Fallback: any word that isn't the excluded one.
+    val fallback = candidates.firstOrNull { it.word != exclude } ?: candidates.first()
+    onPicked?.invoke(fallback)
+    return fallback
 }
 
-/** Picks a random word different from [exclude], weighted by learning state. */
-private fun nextRandomWord(context: Context, exclude: String?): Word? {
-    val allWords = WordRepository(context).loadDecks().flatMap { it.words }
-    return WordPicker(ProgressStore(context)).pickNext(allWords, exclude)
+internal fun widgetStatusColor(state: WordState): Int = when (state) {
+    WordState.MASTERED -> android.graphics.Color.rgb(48, 185, 97)
+    WordState.REVIEWING -> android.graphics.Color.rgb(235, 161, 90)
+    WordState.LEARNING -> android.graphics.Color.rgb(192, 117, 113)
+    WordState.NEW -> android.graphics.Color.rgb(102, 102, 102)
 }
 
-private const val PREFS_NAME = "vocab_widget_prefs"
-private const val KEY_FLIPPED = "flipped_"
-private const val KEY_WORD = "word_"
+/** True when the device is locked (keyguard showing). */
+private fun keyguardLocked(context: Context): Boolean =
+    context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked() ?: false
+
+/**
+ * Abbreviates a deck name for compact layouts, e.g. "Common Words I" -> "C.W I".
+ * Keeps leading initials (one per word) plus a trailing roman numeral/number.
+ */
+internal fun abbreviateDeck(name: String): String {
+    val trimmed = name.trim()
+    if (trimmed.isEmpty()) return trimmed
+    val parts = trimmed.split(Regex("\\s+"))
+    val initials = parts.takeWhile { part ->
+        !part.matches(Regex("[IVXLC]+"))
+    }.mapNotNull { it.firstOrNull()?.uppercase() }.joinToString(".")
+    val trailing = parts.dropWhile { part ->
+        !part.matches(Regex("[IVXLC]+"))
+    }.take(1).joinToString(" ")
+    return (initials + if (trailing.isNotEmpty()) " $trailing" else "").trim()
+}
+
 private const val ACTION_FLIP = "com.example.myapplication.action.FLIP"
 private const val ACTION_NEXT = "com.example.myapplication.action.NEXT"
 private const val ACTION_TOGGLE_LEARNED = "com.example.myapplication.action.TOGGLE_LEARNED"
