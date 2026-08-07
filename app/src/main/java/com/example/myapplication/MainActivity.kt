@@ -1,12 +1,9 @@
 package com.example.myapplication
 
 import android.annotation.SuppressLint
-import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
@@ -42,7 +39,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         WidgetRefreshService.start(this)
-        requestNotificationPermission()
         setContent {
             val refreshSettings = remember { WidgetRefreshSettingsStore(applicationContext) }
             refreshSettings.revision.intValue
@@ -98,15 +94,6 @@ class MainActivity : ComponentActivity() {
             }
         }
         requestBatteryOptimizationExemption()
-    }
-
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
     }
 
     @SuppressLint("BatteryLife")
