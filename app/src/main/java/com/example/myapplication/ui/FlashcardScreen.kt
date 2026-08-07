@@ -190,7 +190,11 @@ private fun TapBar(text: String, onTap: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val bg by animateColorAsState(
-        targetValue = if (isPressed) Color(0xFFE0E0E0) else Color(0xFFF2F2F2),
+        targetValue = if (isPressed) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        },
         label = "tapBarBg"
     )
     Box(
@@ -207,7 +211,7 @@ private fun TapBar(text: String, onTap: () -> Unit) {
     ) {
         Text(
             text = text,
-            color = Color(0xFF666666),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp,
             textAlign = TextAlign.Center
         )
@@ -228,7 +232,7 @@ private fun Flashcard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = cardShape,
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
         shadowElevation = 4.dp
     ) {
         SubcomposeLayout(
@@ -313,7 +317,7 @@ private fun FrontFace(
             fontFamily = FontFamily.Serif,
             fontSize = 34.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.Black,
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center
         )
         if (fillHeight) {
@@ -321,7 +325,7 @@ private fun FrontFace(
         } else {
             Spacer(modifier = Modifier.height(40.dp))
         }
-        HorizontalDivider(color = Color(0xFFE0E0E0))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
         TapBar(text = "Tap to see meaning →", onTap = onFlip)
     }
 }
@@ -350,20 +354,20 @@ private fun BackFace(
                 text = word.word,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.Black
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = word.definition ?: "(definition coming soon)",
                 fontSize = 18.sp,
-                color = Color(0xFF333333)
+                color = MaterialTheme.colorScheme.onSurface
             )
             word.example?.let { example ->
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "\"$example\"",
                     fontSize = 15.sp,
-                    color = Color(0xFF555555)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -473,7 +477,7 @@ internal fun ProgressStat(label: String, fraction: Float, color: Color) {
                 .fillMaxWidth()
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(Color(0xFFE6E6E6))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Box(
                 modifier = Modifier

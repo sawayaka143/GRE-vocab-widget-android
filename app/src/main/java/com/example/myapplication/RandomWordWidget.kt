@@ -90,10 +90,15 @@ internal fun updateRandomWordWidget(
         ?: return
     val flipped = store.flipped(appWidgetId)
     val wordState = ProgressStore(context).stateOf(word.word)
+    val palette = widgetPalette(context)
 
     val views = RemoteViews(context.packageName, R.layout.widget_random_word)
+    views.setInt(R.id.widget_root_random, "setBackgroundResource", palette.backgroundResource)
     views.setTextViewText(R.id.widget_deck, abbreviateDeck(word.deck))
+    views.setTextColor(R.id.widget_deck, palette.accentColor)
     views.setTextViewText(R.id.widget_word, word.word)
+    views.setTextColor(R.id.widget_word, palette.primaryTextColor)
+    views.setTextColor(R.id.widget_definition, palette.secondaryTextColor)
     views.setTextColor(R.id.widget_status, widgetStatusColor(wordState))
     if (flipped) {
         views.setTextViewText(

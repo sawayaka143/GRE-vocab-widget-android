@@ -10,11 +10,10 @@ import java.util.concurrent.TimeUnit
 internal object WidgetRefreshScheduler {
 
     private const val WORK_NAME = "background_widget_refresh"
-    private const val REFRESH_INTERVAL_MINUTES = 30L
 
-    fun enable(context: Context) {
+    fun enable(context: Context, intervalMinutes: Long) {
         val request = PeriodicWorkRequestBuilder<WidgetRefreshWorker>(
-            REFRESH_INTERVAL_MINUTES,
+            intervalMinutes,
             TimeUnit.MINUTES
         ).build()
         WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
@@ -24,9 +23,9 @@ internal object WidgetRefreshScheduler {
         )
     }
 
-    fun ensureScheduled(context: Context) {
+    fun ensureScheduled(context: Context, intervalMinutes: Long) {
         val request = PeriodicWorkRequestBuilder<WidgetRefreshWorker>(
-            REFRESH_INTERVAL_MINUTES,
+            intervalMinutes,
             TimeUnit.MINUTES
         ).build()
         WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(

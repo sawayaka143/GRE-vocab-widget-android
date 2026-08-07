@@ -33,8 +33,12 @@ class WordGoblinApp : Application() {
         super.onCreate()
         val filter = IntentFilter(Intent.ACTION_SCREEN_ON)
         registerReceiver(screenReceiver, filter, RECEIVER_EXPORTED)
-        if (WidgetRefreshSettingsStore(this).refreshWhileAway()) {
-            WidgetRefreshScheduler.ensureScheduled(this)
+        val settings = WidgetRefreshSettingsStore(this)
+        if (settings.refreshWhileAway()) {
+            WidgetRefreshScheduler.ensureScheduled(
+                this,
+                settings.effectiveBackgroundIntervalMinutes()
+            )
         }
     }
 }

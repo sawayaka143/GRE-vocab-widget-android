@@ -2,7 +2,6 @@ package com.example.myapplication.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Magoosh-style purple palette
 val MagooshPurple = Color(0xFF6B3FA0)
 val MagooshPurpleDark = Color(0xFF4A2A73)
 val MagooshPurpleBg = Color(0xFF4D2079)

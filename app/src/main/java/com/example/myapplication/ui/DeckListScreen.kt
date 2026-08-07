@@ -25,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -36,17 +35,12 @@ import com.example.myapplication.data.DeckSelectionStore
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.ui.theme.MagooshGreen
 
-// The gray band behind "Practice this deck →" (user-specified color).
-private val PracticeBandGray = Color(0xFFF4F4F4)
-private val DeckCardTitle = Color(0xFF1F1F1F)
-private val DeckCardSubtitle = Color(0xFF757575)
-private val ProgressTrack = Color(0xFFEEEEEF)
-
 @Composable
 fun DeckListScreen(
     decks: List<Deck>,
     progressStore: ProgressStore,
     selectionStore: DeckSelectionStore,
+    checkboxesOnRight: Boolean,
     onPracticeDeck: (Deck) -> Unit,
     onOpenSettings: () -> Unit
 ) {
@@ -100,6 +94,7 @@ fun DeckListScreen(
                     deck = deck,
                     progressStore = progressStore,
                     checked = selectionStore.isSelected(deck.name),
+                    checkboxesOnRight = checkboxesOnRight,
                     onCheckedChange = { checked -> selectionStore.setSelected(deck.name, checked) },
                     onPractice = { onPracticeDeck(deck) }
                 )
@@ -123,6 +118,7 @@ private fun DeckCard(
     deck: Deck,
     progressStore: ProgressStore,
     checked: Boolean,
+    checkboxesOnRight: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     onPractice: () -> Unit
 ) {
@@ -137,25 +133,42 @@ private fun DeckCard(
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Checkbox(
-                    checked = checked,
-                    onCheckedChange = onCheckedChange,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-                Text(
-                    text = deck.name,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = DeckCardTitle,
-                    modifier = Modifier.padding(end = 16.dp)
-                )
+                if (checkboxesOnRight) {
+                    Text(
+                        text = deck.name,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 16.dp)
+                    )
+                    Checkbox(
+                        checked = checked,
+                        onCheckedChange = onCheckedChange,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                } else {
+                    Checkbox(
+                        checked = checked,
+                        onCheckedChange = onCheckedChange,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                    Text(
+                        text = deck.name,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(end = 16.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(2.dp))
@@ -163,7 +176,7 @@ private fun DeckCard(
             Text(
                 text = label,
                 fontSize = 14.sp,
-                color = DeckCardSubtitle,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
 
@@ -178,7 +191,7 @@ private fun DeckCard(
                     .padding(horizontal = 16.dp)
                     .height(18.4.dp),
                 color = MagooshGreen,
-                trackColor = ProgressTrack,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 strokeCap = StrokeCap.Butt
             )
 
@@ -189,14 +202,14 @@ private fun DeckCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(PracticeBandGray)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                HorizontalDivider(color = Color(0xFFEEEEEE))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
 
                 Text(
                     text = "Practice this deck →",
                     fontSize = 14.sp,
-                    color = DeckCardSubtitle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()

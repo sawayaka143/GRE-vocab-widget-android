@@ -39,12 +39,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MyApplicationTheme {
+            val refreshSettings = remember { WidgetRefreshSettingsStore(applicationContext) }
+            refreshSettings.revision.intValue
+            MyApplicationTheme(
+                darkTheme = refreshSettings.isDarkTheme(),
+                magooshTheme = refreshSettings.isMagooshTheme()
+            ) {
                 val repository = remember { WordRepository(applicationContext) }
                 val progressStore = remember { ProgressStore(applicationContext) }
                 val sessionStore = remember { SessionStore(applicationContext) }
                 val selectionStore = remember { DeckSelectionStore(applicationContext) }
-                val refreshSettings = remember { WidgetRefreshSettingsStore(applicationContext) }
                 var selectedDeck by remember { mutableStateOf<Deck?>(null) }
                 var showSettings by remember { mutableStateOf(false) }
 
@@ -69,6 +73,7 @@ class MainActivity : ComponentActivity() {
                         decks = repository.loadDecks(),
                         progressStore = progressStore,
                         selectionStore = selectionStore,
+                        checkboxesOnRight = refreshSettings.checkboxesOnRight(),
                         onPracticeDeck = {
                             sessionStore.setActiveDeck(it.name)
                             selectedDeck = it

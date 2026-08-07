@@ -7,6 +7,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.view.View
 import android.widget.RemoteViews
 import com.example.myapplication.data.Deck
@@ -14,6 +15,7 @@ import com.example.myapplication.data.DeckSelectionStore
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.RandomWordWidgetStore
 import com.example.myapplication.data.SessionStore
+import com.example.myapplication.data.WidgetRefreshSettingsStore
 import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordPicker
 import com.example.myapplication.data.WordRepository
@@ -128,11 +130,25 @@ internal fun updateAppWidget(
     val flipped = session.flipped(word.deck)
     val wordState = ProgressStore(context).stateOf(word.word)
     val learned = wordState == WordState.MASTERED
+    val palette = widgetPalette(context)
 
     // The original widget is always the full 4x2 card (no responsive compact variant).
     val views = RemoteViews(context.packageName, R.layout.new_app_widget)
+    views.setInt(R.id.widget_root, "setBackgroundResource", palette.backgroundResource)
+    views.setInt(R.id.widget_reveal_bar, "setBackgroundResource", palette.revealBackgroundResource)
     views.setTextViewText(R.id.widget_deck, word.deck)
+    views.setTextColor(R.id.widget_deck, palette.accentColor)
     views.setTextViewText(R.id.widget_word, word.word)
+    views.setTextColor(R.id.widget_word, palette.primaryTextColor)
+    views.setTextColor(R.id.widget_definition, palette.secondaryTextColor)
+    views.setTextColor(R.id.widget_example, palette.tertiaryTextColor)
+    views.setTextColor(R.id.widget_reveal_bar, palette.secondaryTextColor)
+    views.setTextColor(R.id.widget_learned, palette.accentColor)
+    views.setColorStateList(
+        R.id.widget_learned,
+        "setButtonTintList",
+        ColorStateList.valueOf(palette.accentColor)
+    )
     views.setTextColor(R.id.widget_status, widgetStatusColor(wordState))
     views.setCompoundButtonChecked(R.id.widget_learned, learned)
 
@@ -191,6 +207,60 @@ internal fun updateAllWidgets(context: Context) {
     val randomIds = manager.getAppWidgetIds(ComponentName(context, RandomWordWidget::class.java))
     for (widgetId in randomIds) {
         updateRandomWordWidget(context, manager, widgetId)
+    }
+}
+
+internal data class WidgetPalette(
+    val backgroundResource: Int,
+    val revealBackgroundResource: Int,
+    val accentColor: Int,
+    val primaryTextColor: Int,
+    val secondaryTextColor: Int,
+    val tertiaryTextColor: Int
+)
+
+internal fun widgetPalette(context: Context): WidgetPalette {
+    val settings = WidgetRefreshSettingsStore(context)
+    if (settings.isMagooshTheme()) {
+        return if (settings.isDarkTheme()) {
+            WidgetPalette(
+                backgroundResource = R.drawable.app_widget_background_magoosh_dark,
+                revealBackgroundResource = R.drawable.widget_reveal_bar_bg_magoosh_dark,
+                accentColor = android.graphics.Color.rgb(107, 63, 160),
+                primaryTextColor = android.graphics.Color.WHITE,
+                secondaryTextColor = android.graphics.Color.rgb(220, 220, 220),
+                tertiaryTextColor = android.graphics.Color.rgb(170, 170, 170)
+            )
+        } else {
+            WidgetPalette(
+                backgroundResource = R.drawable.app_widget_background_light,
+                revealBackgroundResource = R.drawable.widget_reveal_bar_bg,
+                accentColor = android.graphics.Color.rgb(107, 63, 160),
+                primaryTextColor = android.graphics.Color.BLACK,
+                secondaryTextColor = android.graphics.Color.rgb(51, 51, 51),
+                tertiaryTextColor = android.graphics.Color.rgb(102, 102, 102)
+            )
+        }
+    }
+
+    return if (settings.isDarkTheme()) {
+        WidgetPalette(
+            backgroundResource = R.drawable.app_widget_background_dark,
+            revealBackgroundResource = R.drawable.widget_reveal_bar_bg_dark,
+            accentColor = android.graphics.Color.rgb(197, 198, 202),
+            primaryTextColor = android.graphics.Color.WHITE,
+            secondaryTextColor = android.graphics.Color.rgb(193, 198, 198),
+            tertiaryTextColor = android.graphics.Color.rgb(193, 198, 198)
+        )
+    } else {
+        WidgetPalette(
+            backgroundResource = R.drawable.app_widget_background_light,
+            revealBackgroundResource = R.drawable.widget_reveal_bar_bg_light,
+            accentColor = android.graphics.Color.rgb(53, 104, 89),
+            primaryTextColor = android.graphics.Color.rgb(23, 32, 28),
+            secondaryTextColor = android.graphics.Color.rgb(63, 74, 69),
+            tertiaryTextColor = android.graphics.Color.rgb(96, 110, 103)
+        )
     }
 }
 
