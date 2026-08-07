@@ -1,6 +1,13 @@
 package com.example.myapplication
 
+import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -77,6 +84,36 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+        requestBatteryOptimizationExemption()
+    }
+
+    @SuppressLint("BatteryLife")
+    private fun requestBatteryOptimizationExemption() {
+        val powerManager = getSystemService(PowerManager::class.java) ?: return
+        if (powerManager.isIgnoringBatteryOptimizations(packageName)) return
+
+        Toast.makeText(
+            this,
+            "To keep widgets updating in Low Power Mode, please allow unrestricted battery usage for WordGoblin.",
+            Toast.LENGTH_LONG
+        ).show()
+
+        val requestIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        try {
+            startActivity(requestIntent)
+        } catch (_: ActivityNotFoundException) {
+            openBatteryOptimizationSettings()
+        } catch (_: SecurityException) {
+            openBatteryOptimizationSettings()
+        }
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         }
     }
 }

@@ -6,31 +6,23 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import com.example.myapplication.data.WidgetRefreshStateStore
 
 /**
- * Application-level screen-event receiver.
+ * Best-effort application-level screen-on receiver.
  *
  * SCREEN_ON/SCREEN_OFF cannot be received via manifest registration on
- * Android 8+ (implicit broadcast ban), and registering from an Activity is
- * fragile because the activity (and its receiver) is destroyed when the app
- * goes to the background. Registering here keeps the receiver alive for the
- * whole process lifetime, so the widget rotates on every screen-off/on cycle
- * even when the user is on the home screen.
+ * Android 8+ (implicit broadcast ban). Registering SCREEN_ON here preserves
+ * the best-effort refresh while the process is alive. USER_PRESENT is handled
+ * by WidgetRefreshReceiver so it can also wake a dead process.
  */
 class WordGoblinApp : Application() {
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            val state = WidgetRefreshStateStore(context)
             when (intent.action) {
-                Intent.ACTION_SCREEN_OFF -> state.markScreenOff()
                 Intent.ACTION_SCREEN_ON -> {
                     val km = context.getSystemService(KeyguardManager::class.java)
                     if (km?.isKeyguardLocked() != true) rotateWidgetsForDeviceEvent(context)
-                }
-                Intent.ACTION_USER_PRESENT -> {
-                    if (state.consumePendingUnlock()) rotateWidgetsForDeviceEvent(context)
                 }
             }
         }
@@ -38,11 +30,7 @@ class WordGoblinApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_SCREEN_ON)
-            addAction(Intent.ACTION_SCREEN_OFF)
-            addAction(Intent.ACTION_USER_PRESENT)
-        }
+        val filter = IntentFilter(Intent.ACTION_SCREEN_ON)
         registerReceiver(screenReceiver, filter, RECEIVER_EXPORTED)
     }
 }
