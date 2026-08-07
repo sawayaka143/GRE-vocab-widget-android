@@ -15,10 +15,11 @@ class WordPickerTest {
     /** Builds a picker whose state lookup returns constants for the given words. */
     private fun picker(
         vararg stateOverrides: Pair<String, WordState>,
-        seed: Int = 0
+        seed: Int = 0,
+        weights: StateWeights = StateWeights.DEFAULT
     ): WordPicker {
         val state = stateOverrides.toMap()
-        return WordPicker({ state[it] ?: WordState.NEW }, Random(seed))
+        return WordPicker({ state[it] ?: WordState.NEW }, Random(seed), weights = weights)
     }
 
     @Test
@@ -62,7 +63,11 @@ class WordPickerTest {
     @Test
     fun masteredWords_areSkippedWhileAnyNonMasteredRemains() {
         val all = words("newWord", "masteredWord")
-        val picker = picker("masteredWord" to WordState.MASTERED, seed = 1)
+        val picker = picker(
+            "masteredWord" to WordState.MASTERED,
+            seed = 1,
+            weights = StateWeights(new = 5, learning = 4, reviewing = 3, mastered = 0)
+        )
         repeat(50) {
             assertEquals("newWord", picker.pickNext(all)?.word)
         }

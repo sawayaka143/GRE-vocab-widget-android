@@ -42,6 +42,26 @@ private val DarkColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF3E3F45)
 )
 
+// OLED-friendly palette: pure black backgrounds let AMOLED pixels stay off.
+internal val OledDarkColorScheme = darkColorScheme(
+    primary = OledTextPrimary,
+    onPrimary = Color.Black,
+    primaryContainer = OledTextPrimary,
+    onPrimaryContainer = Color.Black,
+    secondary = OledTextPrimary,
+    onSecondary = Color.Black,
+    secondaryContainer = OledBgPrimary,
+    onSecondaryContainer = OledTextPrimary,
+    background = OledBgSecondary,
+    onBackground = OledTextPrimary,
+    surface = OledBgTertiary,
+    onSurface = OledTextPrimary,
+    surfaceVariant = OledBgTertiary,
+    onSurfaceVariant = OledTextSecondary,
+    outline = OledBorder,
+    outlineVariant = OledBorder
+)
+
 // Original palette retained as an explicit compatibility theme.
 private val OriginalMagooshLightColorScheme = lightColorScheme(
     primary = MagooshPurple,
@@ -71,10 +91,12 @@ private val OriginalMagooshDarkColorScheme = darkColorScheme(
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     magooshTheme: Boolean = false,
+    oledTheme: Boolean = false,
     content: @Composable () -> Unit
 ) {
     MaterialTheme(
         colorScheme = when {
+            oledTheme -> OledDarkColorScheme
             magooshTheme && darkTheme -> OriginalMagooshDarkColorScheme
             magooshTheme -> OriginalMagooshLightColorScheme
             darkTheme -> DarkColorScheme
@@ -82,4 +104,14 @@ fun MyApplicationTheme(
         },
         content = content
     )
+}
+
+/** The theme actually active in composition, for theme-specific styling. */
+internal enum class AppThemeMode { LIGHT, DARK, OLED }
+
+@Composable
+internal fun currentThemeMode(): AppThemeMode = when (MaterialTheme.colorScheme) {
+    OledDarkColorScheme -> AppThemeMode.OLED
+    DarkColorScheme -> AppThemeMode.DARK
+    else -> AppThemeMode.LIGHT
 }

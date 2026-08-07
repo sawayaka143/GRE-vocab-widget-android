@@ -1,7 +1,9 @@
 package com.example.myapplication.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,8 +20,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,13 +33,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.MAX_REFRESH_INTERVAL_MINUTES
+import com.example.myapplication.data.MAX_STATE_WEIGHT
 import com.example.myapplication.data.MIN_BACKGROUND_REFRESH_INTERVAL_MINUTES
 import com.example.myapplication.data.MIN_REFRESH_INTERVAL_MINUTES
+import com.example.myapplication.data.StateWeights
 import com.example.myapplication.data.ThemeMode
 import com.example.myapplication.data.WidgetRefreshSettingsStore
+import kotlin.math.roundToInt
+import com.example.myapplication.ui.theme.AppThemeMode
+import com.example.myapplication.ui.theme.OledBgPrimary
+import com.example.myapplication.ui.theme.OledBgTertiary
+import com.example.myapplication.ui.theme.OledTextPrimary
+import com.example.myapplication.ui.theme.OledTextSecondary
+import com.example.myapplication.ui.theme.currentThemeMode
 
 @Composable
 fun SettingsScreen(
@@ -48,6 +62,23 @@ fun SettingsScreen(
     }
     val parsedInterval = intervalText.toIntOrNull()
 
+    // Local slider state; persisted when the user releases a slider.
+    var weights by remember(settingsStore.revision.intValue) {
+        mutableStateOf(settingsStore.stateWeights())
+    }
+
+    // Inverted OLED switch: black track with off-white thumb.
+    val switchColors = if (currentThemeMode() == AppThemeMode.OLED) {
+        SwitchDefaults.colors(
+            checkedTrackColor = OledBgPrimary,
+            checkedThumbColor = OledTextPrimary,
+            uncheckedTrackColor = OledBgTertiary,
+            uncheckedThumbColor = OledTextSecondary
+        )
+    } else {
+        SwitchDefaults.colors()
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -57,6 +88,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .safeDrawingPadding()
                 .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -96,16 +128,11 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                         fontSize = 16.sp
                     )
-                    Text(
-                        text = "Refresh approximately every 30 minutes while the phone is in use.",
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
                 }
                 Switch(
                     checked = settingsStore.refreshWhileAway(),
-                    onCheckedChange = settingsStore::setRefreshWhileAway
+                    onCheckedChange = settingsStore::setRefreshWhileAway,
+                    colors = switchColors
                 )
             }
 
@@ -167,6 +194,47 @@ fun SettingsScreen(
             HorizontalDivider(modifier = Modifier.padding(top = 24.dp))
 
             Text(
+                text = "Word picking",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 18.sp,
+                modifier = Modifier.padding(top = 20.dp)
+            )
+
+            Text(
+                text = "Weight = how often words in that state appear (0 = never)",
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+
+            WeightSliderRow(
+                label = "New words",
+                weight = weights.new,
+                onWeightChange = { weights = weights.copy(new = it) },
+                onWeightChangeFinished = { settingsStore.setStateWeights(weights) }
+            )
+            WeightSliderRow(
+                label = "Learning",
+                weight = weights.learning,
+                onWeightChange = { weights = weights.copy(learning = it) },
+                onWeightChangeFinished = { settingsStore.setStateWeights(weights) }
+            )
+            WeightSliderRow(
+                label = "Reviewing",
+                weight = weights.reviewing,
+                onWeightChange = { weights = weights.copy(reviewing = it) },
+                onWeightChangeFinished = { settingsStore.setStateWeights(weights) }
+            )
+            WeightSliderRow(
+                label = "Mastered",
+                weight = weights.mastered,
+                onWeightChange = { weights = weights.copy(mastered = it) },
+                onWeightChangeFinished = { settingsStore.setStateWeights(weights) }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(top = 24.dp))
+
+            Text(
                 text = "Layout",
                 color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 18.sp,
@@ -185,16 +253,11 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                         fontSize = 16.sp
                     )
-                    Text(
-                        text = "Show deck selection checkboxes on the right of the deck names instead of the left.",
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
                 }
                 Switch(
                     checked = settingsStore.checkboxesOnRight(),
-                    onCheckedChange = settingsStore::setCheckboxesOnRight
+                    onCheckedChange = settingsStore::setCheckboxesOnRight,
+                    colors = switchColors
                 )
             }
 
@@ -237,5 +300,45 @@ private fun themeLabel(mode: ThemeMode): String = when (mode) {
     ThemeMode.SYSTEM -> "Use system theme"
     ThemeMode.LIGHT -> "Light theme"
     ThemeMode.DARK -> "Dark theme"
+    ThemeMode.OLED -> "OLED theme (pure black)"
     ThemeMode.MAGOOSH -> "Ugly Magoosh theme"
+}
+
+@Composable
+private fun WeightSliderRow(
+    label: String,
+    weight: Int,
+    onWeightChange: (Int) -> Unit,
+    onWeightChangeFinished: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 15.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Slider(
+            value = weight.toFloat(),
+            onValueChange = { onWeightChange(it.roundToInt()) },
+            onValueChangeFinished = onWeightChangeFinished,
+            valueRange = 0f..MAX_STATE_WEIGHT.toFloat(),
+            steps = MAX_STATE_WEIGHT - 1,
+            modifier = Modifier
+                .padding(horizontal = 8.dp)
+                .weight(1.6f)
+        )
+        Text(
+            text = weight.toString(),
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 14.sp,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(24.dp)
+        )
+    }
 }

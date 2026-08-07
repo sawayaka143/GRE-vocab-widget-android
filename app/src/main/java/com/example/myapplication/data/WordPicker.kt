@@ -2,6 +2,26 @@ package com.example.myapplication.data
 
 import kotlin.random.Random
 
+/** How often words in each learning state are picked; higher = more often. */
+data class StateWeights(
+    val new: Int,
+    val learning: Int,
+    val reviewing: Int,
+    val mastered: Int
+) {
+    companion object {
+        val DEFAULT = StateWeights(
+            new = 5,
+            learning = 4,
+            reviewing = 3,
+            mastered = 1
+        )
+    }
+}
+
+/** Upper bound for a single state weight; 0 means the state is skipped while other words remain. */
+const val MAX_STATE_WEIGHT = 10
+
 /**
  * Picks the next word to practice using weighted randomness driven by learning state.
  *
@@ -20,7 +40,8 @@ import kotlin.random.Random
 class WordPicker(
     private val stateOf: (String) -> WordState,
     private val random: Random = Random.Default,
-    private val initialRecent: List<String> = emptyList()
+    private val initialRecent: List<String> = emptyList(),
+    private val weights: StateWeights = StateWeights.DEFAULT
 ) {
 
     private val recent = ArrayDeque<String>(initialRecent)
@@ -32,10 +53,10 @@ class WordPicker(
         // Weight by learning state, then apply the recency penalty.
         val weighted = words.map { word ->
             val base = when (stateOf(word.word)) {
-                WordState.NEW -> NEW_WEIGHT
-                WordState.LEARNING -> LEARNING_WEIGHT
-                WordState.REVIEWING -> REVIEWING_WEIGHT
-                WordState.MASTERED -> MASTERED_WEIGHT
+                WordState.NEW -> weights.new
+                WordState.LEARNING -> weights.learning
+                WordState.REVIEWING -> weights.reviewing
+                WordState.MASTERED -> weights.mastered
             }
             val penalized = if (word.word in recent) (base * RECENCY_PENALTY).toInt() else base
             // Never drop below 1 for non-mastered words, so a recent word stays eligible.
@@ -74,13 +95,6 @@ class WordPicker(
     }
 
     private companion object {
-        // Mastered words get a small weight so they occasionally resurface for
-        // spaced reinforcement instead of disappearing forever.
-        const val NEW_WEIGHT = 5
-        const val LEARNING_WEIGHT = 4
-        const val REVIEWING_WEIGHT = 3
-        const val MASTERED_WEIGHT = 1
-
         /** How much to shrink the weight of a word shown within the last [MAX_RECENT] picks. */
         const val RECENCY_PENALTY = 0.5f
 

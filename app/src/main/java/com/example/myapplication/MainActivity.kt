@@ -43,7 +43,8 @@ class MainActivity : ComponentActivity() {
             refreshSettings.revision.intValue
             MyApplicationTheme(
                 darkTheme = refreshSettings.isDarkTheme(),
-                magooshTheme = refreshSettings.isMagooshTheme()
+                magooshTheme = refreshSettings.isMagooshTheme(),
+                oledTheme = refreshSettings.isOledTheme()
             ) {
                 val repository = remember { WordRepository(applicationContext) }
                 val progressStore = remember { ProgressStore(applicationContext) }
@@ -85,6 +86,7 @@ class MainActivity : ComponentActivity() {
                         deck = selectedDeck!!,
                         progressStore = progressStore,
                         sessionStore = sessionStore,
+                        settingsStore = refreshSettings,
                         onBack = { selectedDeck = null }
                     )
                 }

@@ -149,7 +149,7 @@ internal fun updateAppWidget(
         "setButtonTintList",
         ColorStateList.valueOf(palette.accentColor)
     )
-    views.setTextColor(R.id.widget_status, widgetStatusColor(wordState))
+    views.setTextColor(R.id.widget_status, widgetStatusColor(context, wordState))
     views.setCompoundButtonChecked(R.id.widget_learned, learned)
 
     if (flipped) {
@@ -241,6 +241,17 @@ internal fun widgetPalette(context: Context): WidgetPalette {
                 tertiaryTextColor = android.graphics.Color.rgb(102, 102, 102)
             )
         }
+    }
+
+    if (settings.isOledTheme()) {
+        return WidgetPalette(
+            backgroundResource = R.drawable.app_widget_background_oled,
+            revealBackgroundResource = R.drawable.widget_reveal_bar_bg_oled,
+            accentColor = android.graphics.Color.rgb(242, 243, 245),
+            primaryTextColor = android.graphics.Color.WHITE,
+            secondaryTextColor = android.graphics.Color.rgb(138, 143, 152),
+            tertiaryTextColor = android.graphics.Color.rgb(110, 114, 120)
+        )
     }
 
     return if (settings.isDarkTheme()) {
@@ -351,7 +362,11 @@ internal fun nextRandomWordAcrossDecks(
     onPicked: ((Word) -> Unit)? = null
 ): Word? {
     if (decks.isEmpty()) return null
-    val picker = WordPicker(ProgressStore(context)::stateOf, initialRecent = recentWords)
+    val picker = WordPicker(
+        ProgressStore(context)::stateOf,
+        initialRecent = recentWords,
+        weights = WidgetRefreshSettingsStore(context).stateWeights()
+    )
     val candidates = decks.flatMap { it.words }
     if (candidates.isEmpty()) return null
     if (candidates.size == 1) return candidates.first()
@@ -372,11 +387,28 @@ internal fun nextRandomWordAcrossDecks(
     return fallback
 }
 
-internal fun widgetStatusColor(state: WordState): Int = when (state) {
-    WordState.MASTERED -> android.graphics.Color.rgb(48, 185, 97)
-    WordState.REVIEWING -> android.graphics.Color.rgb(235, 161, 90)
-    WordState.LEARNING -> android.graphics.Color.rgb(192, 117, 113)
-    WordState.NEW -> android.graphics.Color.rgb(102, 102, 102)
+internal fun widgetStatusColor(context: Context, state: WordState): Int {
+    val settings = WidgetRefreshSettingsStore(context)
+    return when {
+        settings.isOledTheme() -> when (state) {
+            WordState.MASTERED -> android.graphics.Color.rgb(242, 243, 245)
+            WordState.REVIEWING -> android.graphics.Color.rgb(181, 184, 192)
+            WordState.LEARNING -> android.graphics.Color.rgb(154, 160, 168)
+            WordState.NEW -> android.graphics.Color.rgb(110, 114, 120)
+        }
+        settings.isDarkTheme() -> when (state) {
+            WordState.MASTERED -> android.graphics.Color.rgb(95, 214, 139)
+            WordState.REVIEWING -> android.graphics.Color.rgb(232, 180, 92)
+            WordState.LEARNING -> android.graphics.Color.rgb(232, 138, 138)
+            WordState.NEW -> android.graphics.Color.rgb(193, 198, 198)
+        }
+        else -> when (state) {
+            WordState.MASTERED -> android.graphics.Color.rgb(48, 185, 97)
+            WordState.REVIEWING -> android.graphics.Color.rgb(235, 161, 90)
+            WordState.LEARNING -> android.graphics.Color.rgb(192, 117, 113)
+            WordState.NEW -> android.graphics.Color.rgb(102, 102, 102)
+        }
+    }
 }
 
 /** True when the device is locked (keyguard showing). */

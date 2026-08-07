@@ -42,23 +42,45 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.Deck
 import com.example.myapplication.data.ProgressStore
 import com.example.myapplication.data.SessionStore
+import com.example.myapplication.data.WidgetRefreshSettingsStore
 import com.example.myapplication.data.Word
 import com.example.myapplication.data.WordState
 import com.example.myapplication.data.WordPicker
+import com.example.myapplication.ui.theme.AppThemeMode
+import com.example.myapplication.ui.theme.DarkDangerBg
+import com.example.myapplication.ui.theme.DarkDangerBgPressed
+import com.example.myapplication.ui.theme.DarkDangerFg
+import com.example.myapplication.ui.theme.DarkNewBg
+import com.example.myapplication.ui.theme.DarkNewFg
+import com.example.myapplication.ui.theme.DarkReviewingBg
+import com.example.myapplication.ui.theme.DarkReviewingFg
+import com.example.myapplication.ui.theme.DarkSuccessBg
+import com.example.myapplication.ui.theme.DarkSuccessBgPressed
+import com.example.myapplication.ui.theme.DarkSuccessFg
 import com.example.myapplication.ui.theme.MagooshAmber
 import com.example.myapplication.ui.theme.MagooshGreen
 import com.example.myapplication.ui.theme.MagooshPink
+import com.example.myapplication.ui.theme.OledChipBg
+import com.example.myapplication.ui.theme.OledChipPressed
+import com.example.myapplication.ui.theme.OledDangerFg
+import com.example.myapplication.ui.theme.OledLearningFg
+import com.example.myapplication.ui.theme.OledNewFg
+import com.example.myapplication.ui.theme.OledReviewingFg
+import com.example.myapplication.ui.theme.OledSuccessFg
+import com.example.myapplication.ui.theme.currentThemeMode
 
 @Composable
 fun FlashcardScreen(
     deck: Deck,
     progressStore: ProgressStore,
     sessionStore: SessionStore,
+    settingsStore: WidgetRefreshSettingsStore,
     onBack: () -> Unit
 ) {
     // Observe revisions so progress/session changes from the widget recompose this screen.
     progressStore.revision.intValue
     sessionStore.revision.intValue
+    settingsStore.revision.intValue
 
     // Initialize from the shared session; re-keyed on session revision so a change
     // made anywhere (app or widget) is reflected here.
@@ -72,7 +94,9 @@ fun FlashcardScreen(
     // Only advance when there are words; an empty deck must not divide by zero.
     val total = deck.words.size
     // Weighted-random next word (NEW/LEARNING/REVIEWING, skip MASTERED while possible).
-    val picker = remember(progressStore) { WordPicker(progressStore::stateOf) }
+    // Rebuilt when the user's per-state weights change so picks reflect the setting.
+    val weights = settingsStore.stateWeights()
+    val picker = remember(progressStore, weights) { WordPicker(progressStore::stateOf, weights = weights) }
     val advance: () -> Unit = {
         if (total > 0) {
             val next = picker.pickNext(deck.words, exclude = currentWord?.word)
@@ -383,15 +407,20 @@ private fun BackFace(
 private fun KnewButton(onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val bg by animateColorAsState(
-        targetValue = if (isPressed) Color(0xFF96C4A3) else Color(0xFFBCF5CB),
+    val (bg, bgPressed, fg) = when (currentThemeMode()) {
+        AppThemeMode.DARK -> Triple(DarkSuccessBg, DarkSuccessBgPressed, DarkSuccessFg)
+        AppThemeMode.OLED -> Triple(OledChipBg, OledChipPressed, OledSuccessFg)
+        AppThemeMode.LIGHT -> Triple(Color(0xFFBCF5CB), Color(0xFF96C4A3), Color(0xFF30B961))
+    }
+    val animatedBg by animateColorAsState(
+        targetValue = if (isPressed) bgPressed else bg,
         label = "knewBg"
     )
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .background(bg)
+            .background(animatedBg)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -401,7 +430,7 @@ private fun KnewButton(onClick: () -> Unit) {
     ) {
         Text(
             text = "✓ I knew this word",
-            color = Color(0xFF30B961),
+            color = fg,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold
         )
@@ -412,15 +441,20 @@ private fun KnewButton(onClick: () -> Unit) {
 private fun DidntKnowButton(onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val bg by animateColorAsState(
-        targetValue = if (isPressed) Color(0xFFCAA6A8) else Color(0xFFFDCFD1),
+    val (bg, bgPressed, fg) = when (currentThemeMode()) {
+        AppThemeMode.DARK -> Triple(DarkDangerBg, DarkDangerBgPressed, DarkDangerFg)
+        AppThemeMode.OLED -> Triple(OledChipBg, OledChipPressed, OledDangerFg)
+        AppThemeMode.LIGHT -> Triple(Color(0xFFFDCFD1), Color(0xFFCAA6A8), Color(0xFFC07571))
+    }
+    val animatedBg by animateColorAsState(
+        targetValue = if (isPressed) bgPressed else bg,
         label = "didntKnowBg"
     )
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .background(bg)
+            .background(animatedBg)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -430,7 +464,7 @@ private fun DidntKnowButton(onClick: () -> Unit) {
     ) {
         Text(
             text = "✗ I didn't know this word",
-            color = Color(0xFFC07571),
+            color = fg,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold
         )
@@ -439,11 +473,25 @@ private fun DidntKnowButton(onClick: () -> Unit) {
 
 @Composable
 internal fun StatusBadge(state: WordState, modifier: Modifier = Modifier) {
-    val (label, bg, fg) = when (state) {
-        WordState.MASTERED -> Triple("MASTERED", Color(0xFFBAF5CA), Color(0xFF30B961))
-        WordState.REVIEWING -> Triple("REVIEWING", Color(0xFFFFE3C2), Color(0xFFEBA15A))
-        WordState.LEARNING -> Triple("LEARNING", Color(0xFFF9D1D2), Color(0xFFC07571))
-        WordState.NEW -> Triple("NEW WORD", Color(0xFFF2F2F2), Color(0xFF666666))
+    val (label, bg, fg) = when (currentThemeMode()) {
+        AppThemeMode.DARK -> when (state) {
+            WordState.MASTERED -> Triple("MASTERED", DarkSuccessBg, DarkSuccessFg)
+            WordState.REVIEWING -> Triple("REVIEWING", DarkReviewingBg, DarkReviewingFg)
+            WordState.LEARNING -> Triple("LEARNING", DarkDangerBg, DarkDangerFg)
+            WordState.NEW -> Triple("NEW WORD", DarkNewBg, DarkNewFg)
+        }
+        AppThemeMode.OLED -> when (state) {
+            WordState.MASTERED -> Triple("MASTERED", OledChipBg, OledSuccessFg)
+            WordState.REVIEWING -> Triple("REVIEWING", OledChipBg, OledReviewingFg)
+            WordState.LEARNING -> Triple("LEARNING", OledChipBg, OledLearningFg)
+            WordState.NEW -> Triple("NEW WORD", OledChipBg, OledNewFg)
+        }
+        AppThemeMode.LIGHT -> when (state) {
+            WordState.MASTERED -> Triple("MASTERED", Color(0xFFBAF5CA), Color(0xFF30B961))
+            WordState.REVIEWING -> Triple("REVIEWING", Color(0xFFFFE3C2), Color(0xFFEBA15A))
+            WordState.LEARNING -> Triple("LEARNING", Color(0xFFF9D1D2), Color(0xFFC07571))
+            WordState.NEW -> Triple("NEW WORD", Color(0xFFF2F2F2), Color(0xFF666666))
+        }
     }
     Surface(
         modifier = modifier,

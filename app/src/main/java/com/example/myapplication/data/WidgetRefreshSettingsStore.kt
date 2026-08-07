@@ -11,6 +11,7 @@ enum class ThemeMode {
     SYSTEM,
     LIGHT,
     DARK,
+    OLED,
     MAGOOSH
 }
 
@@ -51,11 +52,14 @@ class WidgetRefreshSettingsStore(context: Context) {
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
+        ThemeMode.OLED -> true
         ThemeMode.MAGOOSH -> (appContext.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
     }
 
     fun isMagooshTheme(): Boolean = themeMode() == ThemeMode.MAGOOSH
+
+    fun isOledTheme(): Boolean = themeMode() == ThemeMode.OLED
 
     fun checkboxesOnRight(): Boolean = prefs.getBoolean(KEY_CHECKBOXES_ON_RIGHT, false)
 
@@ -64,6 +68,30 @@ class WidgetRefreshSettingsStore(context: Context) {
 
         prefs.edit().putBoolean(KEY_CHECKBOXES_ON_RIGHT, enabled).apply()
         revision.intValue++
+    }
+
+    fun stateWeights(): StateWeights = StateWeights(
+        new = prefs.getInt(KEY_WEIGHT_NEW, StateWeights.DEFAULT.new)
+            .coerceIn(0, MAX_STATE_WEIGHT),
+        learning = prefs.getInt(KEY_WEIGHT_LEARNING, StateWeights.DEFAULT.learning)
+            .coerceIn(0, MAX_STATE_WEIGHT),
+        reviewing = prefs.getInt(KEY_WEIGHT_REVIEWING, StateWeights.DEFAULT.reviewing)
+            .coerceIn(0, MAX_STATE_WEIGHT),
+        mastered = prefs.getInt(KEY_WEIGHT_MASTERED, StateWeights.DEFAULT.mastered)
+            .coerceIn(0, MAX_STATE_WEIGHT)
+    )
+
+    fun setStateWeights(weights: StateWeights) {
+        if (weights == stateWeights()) return
+
+        prefs.edit()
+            .putInt(KEY_WEIGHT_NEW, weights.new.coerceIn(0, MAX_STATE_WEIGHT))
+            .putInt(KEY_WEIGHT_LEARNING, weights.learning.coerceIn(0, MAX_STATE_WEIGHT))
+            .putInt(KEY_WEIGHT_REVIEWING, weights.reviewing.coerceIn(0, MAX_STATE_WEIGHT))
+            .putInt(KEY_WEIGHT_MASTERED, weights.mastered.coerceIn(0, MAX_STATE_WEIGHT))
+            .apply()
+        revision.intValue++
+        notifyWidgets()
     }
 
     fun setRefreshWhileAway(enabled: Boolean) {
@@ -109,5 +137,9 @@ class WidgetRefreshSettingsStore(context: Context) {
         const val KEY_REFRESH_INTERVAL_MINUTES = "refresh_interval_minutes"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_CHECKBOXES_ON_RIGHT = "checkboxes_on_right"
+        const val KEY_WEIGHT_NEW = "weight_new"
+        const val KEY_WEIGHT_LEARNING = "weight_learning"
+        const val KEY_WEIGHT_REVIEWING = "weight_reviewing"
+        const val KEY_WEIGHT_MASTERED = "weight_mastered"
     }
 }

@@ -13,10 +13,15 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -33,6 +38,11 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.Deck
 import com.example.myapplication.data.DeckSelectionStore
 import com.example.myapplication.data.ProgressStore
+import com.example.myapplication.ui.theme.AppThemeMode
+import com.example.myapplication.ui.theme.OledBgPrimary
+import com.example.myapplication.ui.theme.OledTextPrimary
+import com.example.myapplication.ui.theme.OledTextSecondary
+import com.example.myapplication.ui.theme.currentThemeMode
 import com.example.myapplication.ui.theme.MagooshGreen
 
 @Composable
@@ -72,14 +82,16 @@ fun DeckListScreen(
                         .weight(1f)
                         .padding(vertical = 12.dp)
                 )
-                Text(
-                    text = "Settings",
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 14.sp,
-                    modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .clickable(onClick = onOpenSettings)
-                )
+                IconButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = "Settings",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
             }
 
             Text(
@@ -127,6 +139,17 @@ private fun DeckCard(
     val fraction = if (total == 0) 0f else mastered.toFloat() / total
     val label = "$mastered of $total words mastered"
 
+    // Inverted OLED checkbox: black body with off-white check; gray outline when unchecked.
+    val checkboxColors = if (currentThemeMode() == AppThemeMode.OLED) {
+        CheckboxDefaults.colors(
+            checkedColor = OledBgPrimary,
+            checkmarkColor = OledTextPrimary,
+            uncheckedColor = OledTextSecondary
+        )
+    } else {
+        CheckboxDefaults.colors()
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -153,12 +176,14 @@ private fun DeckCard(
                     Checkbox(
                         checked = checked,
                         onCheckedChange = onCheckedChange,
+                        colors = checkboxColors,
                         modifier = Modifier.padding(end = 8.dp)
                     )
                 } else {
                     Checkbox(
                         checked = checked,
                         onCheckedChange = onCheckedChange,
+                        colors = checkboxColors,
                         modifier = Modifier.padding(start = 8.dp)
                     )
                     Text(

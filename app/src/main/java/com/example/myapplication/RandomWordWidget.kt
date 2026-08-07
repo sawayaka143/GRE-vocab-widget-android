@@ -99,7 +99,7 @@ internal fun updateRandomWordWidget(
     views.setTextViewText(R.id.widget_word, word.word)
     views.setTextColor(R.id.widget_word, palette.primaryTextColor)
     views.setTextColor(R.id.widget_definition, palette.secondaryTextColor)
-    views.setTextColor(R.id.widget_status, widgetStatusColor(wordState))
+    views.setTextColor(R.id.widget_status, widgetStatusColor(context, wordState))
     if (flipped) {
         views.setTextViewText(
             R.id.widget_definition,
