@@ -35,7 +35,7 @@ class WidgetRefreshStateStore(context: Context) {
     }
 
     /** Avoids rotating twice when two system refresh triggers arrive together. */
-    fun claimRecentRefresh(windowMillis: Long = 10_000L): Boolean = synchronized(REFRESH_LOCK) {
+    fun claimRecentRefresh(windowMillis: Long = 2_000L): Boolean = synchronized(REFRESH_LOCK) {
         val now = SystemClock.elapsedRealtime()
         val lastRefresh = prefs.getLong(KEY_LAST_REFRESH, Long.MIN_VALUE)
         if (lastRefresh != Long.MIN_VALUE &&

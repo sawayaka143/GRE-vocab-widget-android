@@ -41,12 +41,8 @@ class NewAppWidget : AppWidgetProvider() {
     ) {
         // Rotate to a new word on every system-triggered widget update. onUpdate()
         // is called by the system on the periodic APPWIDGET_UPDATE schedule and
-        // on widget placement. Rotates unconditionally so the word always changes.
+        // on widget placement. rotateWidgetsForDeviceEvent already triggers updateAllWidgets.
         rotateWidgetsForDeviceEvent(context)
-
-        for (appWidgetId in appWidgetIds) {
-            updateAppWidget(context, appWidgetManager, appWidgetId)
-        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -176,12 +172,9 @@ internal fun updateAppWidget(
     }
 
     // Tap anywhere on the widget (except the bar/checkbox) -> next random word.
-    // Explicitly set on the word area and the word itself to avoid "dead spots"
-    // on launchers that don't bubble clicks from children to the root.
     val nextIntent = buildPendingIntent(context, appWidgetId, ACTION_NEXT, 0)
     views.setOnClickPendingIntent(R.id.widget_root, nextIntent)
     views.setOnClickPendingIntent(R.id.widget_middle_section, nextIntent)
-    views.setOnClickPendingIntent(R.id.widget_word, nextIntent)
 
     // Tap bottom bar -> flip
     views.setOnClickPendingIntent(
@@ -285,21 +278,22 @@ internal fun rotateWidgetsForDeviceEvent(context: Context) {
     val manager = AppWidgetManager.getInstance(context)
     val store = RandomWordWidgetStore(context)
     if (selected.isNotEmpty()) {
-        // Exclude the ACTIVE deck's session word — that's what the main widget shows.
+        // Pick ONE new word for the shared session (all main widgets show this).
         val activeName = session.activeDeck() ?: selected.first().name
         val exclude = session.currentWordName(activeName)
-        val mainIds = manager.getAppWidgetIds(ComponentName(context, NewAppWidget::class.java))
-        mainIds.forEach { widgetId ->
-            nextRandomWordAcrossDecks(
-                context,
-                selected,
-                exclude,
-                recentWords = store.recentWords(widgetId),
-                onPicked = { store.pushRecentWord(widgetId, it.word) }
-            )?.let {
-                session.setCurrentWord(it.deck, it)
-                session.setActiveDeck(it.deck)
+        
+        nextRandomWordAcrossDecks(
+            context,
+            selected,
+            exclude,
+            onPicked = { word ->
+                // Record recency for all main widget instances.
+                val mainIds = manager.getAppWidgetIds(ComponentName(context, NewAppWidget::class.java))
+                mainIds.forEach { store.pushRecentWord(it, word.word) }
             }
+        )?.let {
+            session.setCurrentWord(it.deck, it)
+            session.setActiveDeck(it.deck)
         }
     }
 
