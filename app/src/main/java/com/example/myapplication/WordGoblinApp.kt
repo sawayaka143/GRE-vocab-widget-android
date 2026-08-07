@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import com.example.myapplication.data.WidgetRefreshSettingsStore
 
 /**
  * Best-effort application-level screen-on receiver.
@@ -32,5 +33,8 @@ class WordGoblinApp : Application() {
         super.onCreate()
         val filter = IntentFilter(Intent.ACTION_SCREEN_ON)
         registerReceiver(screenReceiver, filter, RECEIVER_EXPORTED)
+        if (WidgetRefreshSettingsStore(this).refreshWhileAway()) {
+            WidgetRefreshScheduler.ensureScheduled(this)
+        }
     }
 }

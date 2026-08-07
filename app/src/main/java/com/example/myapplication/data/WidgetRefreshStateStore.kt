@@ -1,6 +1,7 @@
 package com.example.myapplication.data
 
 import android.content.Context
+import android.os.SystemClock
 import android.provider.Settings
 
 class WidgetRefreshStateStore(context: Context) {
@@ -33,7 +34,22 @@ class WidgetRefreshStateStore(context: Context) {
         return true
     }
 
+    /** Avoids rotating twice when two system refresh triggers arrive together. */
+    fun claimRecentRefresh(windowMillis: Long = 10_000L): Boolean = synchronized(REFRESH_LOCK) {
+        val now = SystemClock.elapsedRealtime()
+        val lastRefresh = prefs.getLong(KEY_LAST_REFRESH, Long.MIN_VALUE)
+        if (lastRefresh != Long.MIN_VALUE &&
+            now >= lastRefresh &&
+            now - lastRefresh < windowMillis
+        ) return false
+
+        prefs.edit().putLong(KEY_LAST_REFRESH, now).apply()
+        true
+    }
+
     private companion object {
+        val REFRESH_LOCK = Any()
         const val KEY_LAST_HANDLED_BOOT = "last_handled_boot"
+        const val KEY_LAST_REFRESH = "last_refresh"
     }
 }

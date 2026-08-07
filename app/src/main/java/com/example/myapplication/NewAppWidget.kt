@@ -196,6 +196,8 @@ internal fun updateAllWidgets(context: Context) {
 
 /** Rotates each widget's current word after the device wakes or finishes booting. */
 internal fun rotateWidgetsForDeviceEvent(context: Context) {
+    if (!com.example.myapplication.data.WidgetRefreshStateStore(context).claimRecentRefresh()) return
+
     val session = SessionStore(context)
     val decks = WordRepository(context).loadDecks()
     val selected = selectedDecks(context, decks)

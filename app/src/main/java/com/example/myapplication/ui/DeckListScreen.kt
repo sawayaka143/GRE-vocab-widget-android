@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.Deck
 import com.example.myapplication.data.DeckSelectionStore
 import com.example.myapplication.data.ProgressStore
-import com.example.myapplication.data.QuizProgressStore
 import com.example.myapplication.ui.theme.MagooshGreen
 
 // The gray band behind "Practice this deck →" (user-specified color).
@@ -47,15 +46,13 @@ private val ProgressTrack = Color(0xFFEEEEEF)
 fun DeckListScreen(
     decks: List<Deck>,
     progressStore: ProgressStore,
-    quizProgressStore: QuizProgressStore,
     selectionStore: DeckSelectionStore,
-    onPracticeDeck: (Deck) -> Unit
+    onPracticeDeck: (Deck) -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     // Observe revisions so the list recomposes when progress changes (e.g. from the widget).
     progressStore.revision.intValue
-    quizProgressStore.revision.intValue
     selectionStore.revision.intValue
-    val selectableDecks = decks.filterNot { it.name.startsWith("Common Words - Fill in the Blank") }
     val selectedCount = selectionStore.selectedDeckNames().size
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -68,13 +65,28 @@ fun DeckListScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Text(
-                text = "GRE Vocabulary Flashcards",
-                color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(vertical = 12.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "GRE Vocabulary Flashcards",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 12.dp)
+                )
+                Text(
+                    text = "Settings",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .clickable(onClick = onOpenSettings)
+                )
+            }
 
             Text(
                 text = "Check the decks that feed the home screen widget",
@@ -84,13 +96,10 @@ fun DeckListScreen(
             )
 
             decks.forEach { deck ->
-                val isQuizDeck = deck.name.startsWith("Common Words - Fill in the Blank")
                 DeckCard(
                     deck = deck,
                     progressStore = progressStore,
-                    quizProgressStore = quizProgressStore,
-                    checked = !isQuizDeck && selectionStore.isSelected(deck.name),
-                    selectable = !isQuizDeck,
+                    checked = selectionStore.isSelected(deck.name),
                     onCheckedChange = { checked -> selectionStore.setSelected(deck.name, checked) },
                     onPractice = { onPracticeDeck(deck) }
                 )
@@ -100,7 +109,7 @@ fun DeckListScreen(
 
             Text(
                 text = if (selectedCount == 0) "No decks selected — widget will use all decks"
-                else "Selected: $selectedCount of ${selectableDecks.size} decks feed the widget",
+                else "Selected: $selectedCount of ${decks.size} decks feed the widget",
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 fontSize = 13.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -113,26 +122,14 @@ fun DeckListScreen(
 private fun DeckCard(
     deck: Deck,
     progressStore: ProgressStore,
-    quizProgressStore: QuizProgressStore,
     checked: Boolean,
-    selectable: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     onPractice: () -> Unit
 ) {
-    val isQuizDeck = deck.name.startsWith("Common Words - Fill in the Blank")
     val total = deck.words.size
-    val (answered, fraction) = if (isQuizDeck) {
-        val answered = quizProgressStore.answeredCount(deck.name)
-        answered to if (total == 0) 0f else answered.toFloat() / total
-    } else {
-        val (mastered, _, _) = progressStore.countsFor(deck)
-        mastered to if (total == 0) 0f else mastered.toFloat() / total
-    }
-    val label = if (isQuizDeck) {
-        "$answered of $total questions answered"
-    } else {
-        "$answered of $total words mastered"
-    }
+    val (mastered, _, _) = progressStore.countsFor(deck)
+    val fraction = if (total == 0) 0f else mastered.toFloat() / total
+    val label = "$mastered of $total words mastered"
 
     Card(
         modifier = Modifier
@@ -149,8 +146,7 @@ private fun DeckCard(
             ) {
                 Checkbox(
                     checked = checked,
-                    onCheckedChange = if (selectable) onCheckedChange else null,
-                    enabled = selectable,
+                    onCheckedChange = onCheckedChange,
                     modifier = Modifier.padding(start = 8.dp)
                 )
                 Text(
