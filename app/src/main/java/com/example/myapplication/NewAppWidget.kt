@@ -41,8 +41,14 @@ class NewAppWidget : AppWidgetProvider() {
     ) {
         // Rotate to a new word on every system-triggered widget update. onUpdate()
         // is called by the system on the periodic APPWIDGET_UPDATE schedule and
-        // on widget placement. rotateWidgetsForDeviceEvent already triggers updateAllWidgets.
-        rotateWidgetsForDeviceEvent(context)
+        // on widget placement. If a recent rotation already claimed the dedup
+        // window, still render the requested ids so placement and periodic
+        // updates always paint (never leave the placeholder layout).
+        if (!rotateWidgetsForDeviceEvent(context)) {
+            for (appWidgetId in appWidgetIds) {
+                updateAppWidget(context, appWidgetManager, appWidgetId)
+            }
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -269,8 +275,8 @@ internal fun widgetPalette(context: Context): WidgetPalette {
 }
 
 /** Rotates each widget's current word after the device wakes or finishes booting. */
-internal fun rotateWidgetsForDeviceEvent(context: Context) {
-    if (!com.example.myapplication.data.WidgetRefreshStateStore(context).claimRecentRefresh()) return
+internal fun rotateWidgetsForDeviceEvent(context: Context): Boolean {
+    if (!com.example.myapplication.data.WidgetRefreshStateStore(context).claimRecentRefresh()) return false
 
     val session = SessionStore(context)
     val decks = WordRepository(context).loadDecks()
@@ -311,6 +317,7 @@ internal fun rotateWidgetsForDeviceEvent(context: Context) {
         }
     }
     updateAllWidgets(context)
+    return true
 }
 
 private fun buildPendingIntent(
